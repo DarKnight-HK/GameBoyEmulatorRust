@@ -17,6 +17,7 @@ pub struct CartridgeHeader {
     pub cart_type: MbcType,
     pub ram_size: usize,
     pub rom_size: usize,
+    pub check_sum: u8,
 }
 
 impl CartridgeHeader {
@@ -57,11 +58,14 @@ impl CartridgeHeader {
             _ => 0,
         };
 
+        let checksum = contents[0x14D];
+
         Ok(Self {
             title,
             cart_type,
             ram_size,
             rom_size,
+            check_sum: checksum,
         })
     }
 }
@@ -83,5 +87,15 @@ impl Cartridge {
             rom_data,
             ram_data: vec![0; ram_size],
         })
+    }
+    pub fn verify_checksum(&self) -> bool {
+        let mut checksum: u8 = 0;
+        for address in 0x134..=0x14C {
+
+            checksum = checksum
+                .wrapping_sub(self.rom_data[address])
+                .wrapping_sub(1);
+        }
+        checksum == self.header.check_sum
     }
 }
