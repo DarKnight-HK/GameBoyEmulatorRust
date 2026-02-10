@@ -91,11 +91,38 @@ impl Cartridge {
     pub fn verify_checksum(&self) -> bool {
         let mut checksum: u8 = 0;
         for address in 0x134..=0x14C {
-
             checksum = checksum
                 .wrapping_sub(self.rom_data[address])
                 .wrapping_sub(1);
         }
         checksum == self.header.check_sum
+    }
+
+
+    pub fn read(&self, address: u16) -> u8 {
+        // Memory Map on PanDocs for more info
+        match address {
+            0x0000..=0x7FFF => {
+                if (address as usize) < self.rom_data.len() {
+                    self.rom_data[address as usize]
+                } else {
+                    0xFF
+                }
+            }
+            // SRAM (used to load Pokemon)
+            0xA000..=0xBFFF => {
+                if !self.ram_data.is_empty() {
+                    let relative_address = (address - 0xA000) as usize;
+                    if (relative_address) < self.ram_data.len() {
+                        self.ram_data[relative_address]
+                    } else {
+                        0xFF
+                    }
+                } else {
+                    0xFF
+                }
+            }
+            _ => 0xFF,
+        }
     }
 }
