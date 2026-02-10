@@ -98,7 +98,6 @@ impl Cartridge {
         checksum == self.header.check_sum
     }
 
-
     pub fn read(&self, address: u16) -> u8 {
         // Memory Map on PanDocs for more info
         match address {
