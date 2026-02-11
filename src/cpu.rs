@@ -130,6 +130,19 @@ impl Cpu {
 
         result
     }
+
+    fn jr(&mut self, condition: bool) -> u8 {
+        let offset = self.bus.read_byte(self.pc) as i8;
+        self.pc = self.pc.wrapping_add(1);
+        if condition {
+            self.pc = self.pc.wrapping_add(offset as u16);
+            12
+        }
+        else {
+            8
+        }
+
+    }
 }
 
 // Step function and instructions here
@@ -282,6 +295,38 @@ impl Cpu {
                 let result = self.dec(val);
                 self.bus.write_byte(hl, result);
                 12
+            },
+            // --- JR Family (Jump Relative) ---
+            
+            // 0x18: JR r8 (Unconditional Jump Relative)
+            // Always jumps.
+            0x18 => {
+                self.jr(true); // Always true
+                12 // Unconditional JR is always 12 cycles
+            }
+
+            // 0x20: JR NZ, r8 (Jump if Not Zero)
+            0x20 => {
+                let check = !self.get_z();
+                self.jr(check)
+            }
+
+            // 0x28: JR Z, r8 (Jump if Zero)
+            0x28 => {
+                let check = self.get_z();
+                self.jr(check)
+            }
+
+            // 0x30: JR NC, r8 (Jump if Not Carry)
+            0x30 => {
+                let check = !self.get_c();
+                self.jr(check)
+            }
+
+            // 0x38: JR C, r8 (Jump if Carry)
+            0x38 => {
+                let check = self.get_c();
+                self.jr(check)
             }
             _ => {
                 println!("Unknown Opcode: {:#02X} at {:#04X}", opcode, self.pc - 1);
