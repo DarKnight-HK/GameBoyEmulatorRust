@@ -17,6 +17,7 @@ pub struct Cpu {
     pub sp: u16,
     pub pc: u16,
     f: u8,
+    pub ime: bool,
 }
 
 impl Cpu {
@@ -33,6 +34,7 @@ impl Cpu {
             l: 0x4D,
             sp: 0xFFFE,
             pc: 0x0100,
+            ime: false,
         }
     }
     pub fn get_z(&self) -> bool {
@@ -116,11 +118,16 @@ impl Cpu {
         self.f = 0;
         self.set_z(self.a == 0);
     }
+    fn next_u8(&mut self) -> u8 {
+        let val = self.bus.read_byte(self.pc);
+        self.pc = self.pc.wrapping_add(1);
+        val
+    }
     fn next_u16(&mut self) -> u16 {
         let low = self.bus.read_byte(self.pc) as u16;
         let high = self.bus.read_byte(self.pc + 1) as u16;
         self.pc = self.pc.wrapping_add(2);
-        (high << 8 | low)
+        high << 8 | low
     }
     fn dec(&mut self, value: u8) -> u8 {
         let result = value.wrapping_sub(1);
@@ -137,11 +144,9 @@ impl Cpu {
         if condition {
             self.pc = self.pc.wrapping_add(offset as u16);
             12
-        }
-        else {
+        } else {
             8
         }
-
     }
 }
 
@@ -202,7 +207,6 @@ impl Cpu {
             }
 
             // --- LD r, d8 Group (Load Immediate 8-bit) ---
-            // Cycles: 8
             0x06 => {
                 let val = self.bus.read_byte(self.pc);
                 self.pc = self.pc.wrapping_add(1);
@@ -241,7 +245,6 @@ impl Cpu {
             }
             // Special Case: LD (HL), d8
             // Writes the immediate value to the memory address at HL
-            // Cycles: 12
             0x36 => {
                 let val = self.bus.read_byte(self.pc);
                 self.pc = self.pc.wrapping_add(1);
@@ -288,21 +291,19 @@ impl Cpu {
 
             // Special Case: DEC (HL)
             // Read from memory, decrement, write back.
-            // Cycles: 12 (4 for opcode + 4 for read + 4 for write)
             0x35 => {
                 let hl = self.get_hl();
                 let val = self.bus.read_byte(hl);
                 let result = self.dec(val);
                 self.bus.write_byte(hl, result);
                 12
-            },
+            }
             // --- JR Family (Jump Relative) ---
-            
             // 0x18: JR r8 (Unconditional Jump Relative)
             // Always jumps.
             0x18 => {
-                self.jr(true); // Always true
-                12 // Unconditional JR is always 12 cycles
+                self.jr(true);
+                12
             }
 
             // 0x20: JR NZ, r8 (Jump if Not Zero)
@@ -327,6 +328,68 @@ impl Cpu {
             0x38 => {
                 let check = self.get_c();
                 self.jr(check)
+            }
+
+            // --- LD r, d8 Group (Load Immediate 8-bit) ---
+            0x06 => {
+                self.b = self.next_u8();
+                8
+            }
+            0x0E => {
+                self.c = self.next_u8();
+                8
+            }
+            0x16 => {
+                self.d = self.next_u8();
+                8
+            }
+            0x1E => {
+                self.e = self.next_u8();
+                8
+            }
+            0x26 => {
+                self.h = self.next_u8();
+                8
+            }
+            0x2E => {
+                self.l = self.next_u8();
+                8
+            }
+            0x3E => {
+                self.a = self.next_u8();
+                8
+            }
+
+            // Special Case: LD (HL), d8
+            // 1. Read the immediate value
+            // 2. Write it to memory address (HL)
+            0x36 => {
+                let val = self.next_u8();
+                let hl = self.get_hl();
+                self.bus.write_byte(hl, val);
+                12
+            }
+            // 0xF3: DI (Disable Interrupts)
+            0xF3 => {
+                self.ime = false;
+                4
+            }
+
+            // 0xFB: EI (Enable Interrupts)
+            0xFB => {
+                self.ime = true;
+                4
+            }
+            0xE0 => {
+                let offset = self.next_u8() as u16;
+                let address = 0xFF00 | offset;
+                self.bus.write_byte(address, self.a);
+                12
+            }
+            0xF0 => {
+                let address = 0xFF00 | self.next_u8() as u16;
+                self.a = self.bus.read_byte(address);
+                12
             }
             _ => {
                 println!("Unknown Opcode: {:#02X} at {:#04X}", opcode, self.pc - 1);
