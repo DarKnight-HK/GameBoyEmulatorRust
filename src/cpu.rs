@@ -16,7 +16,7 @@ pub struct Cpu {
     pub l: u8,
     pub sp: u16,
     pub pc: u16,
-    f: u8,
+    pub f: u8,
     pub ime: bool,
 }
 
@@ -215,53 +215,11 @@ impl Cpu {
                 self.set_hl(val);
                 12
             }
-
-            // --- LD r, d8 Group (Load Immediate 8-bit) ---
-            0x06 => {
-                let val = self.bus.read_byte(self.pc);
-                self.pc = self.pc.wrapping_add(1);
-                self.b = val;
-                8
-            }
-            0x0E => {
-                let val = self.bus.read_byte(self.pc);
-                self.pc = self.pc.wrapping_add(1);
-                self.c = val;
-                8
-            }
-            0x16 => {
-                let val = self.bus.read_byte(self.pc);
-                self.pc = self.pc.wrapping_add(1);
-                self.d = val;
-                8
-            }
-            0x1E => {
-                let val = self.bus.read_byte(self.pc);
-                self.pc = self.pc.wrapping_add(1);
-                self.e = val;
-                8
-            }
-            0x26 => {
-                let val = self.bus.read_byte(self.pc);
-                self.pc = self.pc.wrapping_add(1);
-                self.h = val;
-                8
-            }
-            0x2E => {
-                let val = self.bus.read_byte(self.pc);
-                self.pc = self.pc.wrapping_add(1);
-                self.l = val;
-                8
-            }
-            // Special Case: LD (HL), d8
-            // Writes the immediate value to the memory address at HL
-            0x36 => {
-                let val = self.bus.read_byte(self.pc);
-                self.pc = self.pc.wrapping_add(1);
-                let hl = self.get_hl();
-                self.bus.write_byte(hl, val);
+            0x31 => {
+                self.sp = self.next_u16();
                 12
             }
+
             0x32 => {
                 let mut hl = self.get_hl();
                 self.bus.write_byte(hl, self.a);
@@ -395,6 +353,21 @@ impl Cpu {
                 let address = 0xFF00 | offset;
                 self.bus.write_byte(address, self.a);
                 12
+            }
+            // 0xE2: LD (C), A
+            // Write A to (0xFF00 + C)
+            0xE2 => {
+                let address = 0xFF00 | (self.c as u16);
+                self.bus.write_byte(address, self.a);
+                8
+            }
+
+            // 0xF2: LD A, (C)
+            // Read from (0xFF00 + C) into A
+            0xF2 => {
+                let address = 0xFF00 | (self.c as u16);
+                self.a = self.bus.read_byte(address);
+                8
             }
             0xF0 => {
                 let address = 0xFF00 | self.next_u8() as u16;

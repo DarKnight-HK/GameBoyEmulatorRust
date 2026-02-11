@@ -42,9 +42,9 @@ impl CartridgeHeader {
 
         let rom_size = match contents[0x148] {
             0x00..=0x08 => 32 * 1024 * (1 << contents[0x148]),
-            0x52 => (1_152 * 1024),
-            0x53 => (1_280 * 1024),
-            0x54 => (1_536 * 1024),
+            0x52 => 1_152 * 1024,
+            0x53 => 1_280 * 1024,
+            0x54 => 1_536 * 1024,
             _ => 32 * 1024,
         };
 
@@ -122,6 +122,19 @@ impl Cartridge {
                 }
             }
             _ => 0xFF,
+        }
+    }
+    pub fn write(&mut self, address: u16, byte: u8) {
+        match address {
+            0xA000..=0xBFFF => {
+                if !self.ram_data.is_empty() {
+                    let relative_address = (address - 0xA000) as usize;
+                    if relative_address < self.ram_data.len() {
+                        self.ram_data[relative_address] = byte;
+                    }
+                }
+            }
+            _ => {}
         }
     }
 }
