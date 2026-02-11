@@ -148,9 +148,19 @@ impl Cpu {
             8
         }
     }
+
+    fn cp(&mut self, n: u8) {
+        let (result, carry) = self.a.overflowing_sub(n);
+        self.set_z(result == 0);
+        self.set_n(true);
+        self.set_h((self.a & 0x0F) < (n & 0x0F));
+        self.set_c(carry);
+    }
 }
 
 // Step function and instructions here
+// https://gbdev.io/gb-opcodes/optables/
+// https://rgbds.gbdev.io/docs/v1.0.1/gbz80.7
 impl Cpu {
     pub fn step(&mut self) -> u8 {
         let opcode = self.bus.read_byte(self.pc);
@@ -390,6 +400,52 @@ impl Cpu {
                 let address = 0xFF00 | self.next_u8() as u16;
                 self.a = self.bus.read_byte(address);
                 12
+            }
+            // --- CP r8 Family (Compare A with r8) ---
+            0xB8 => {
+                self.cp(self.b);
+                4
+            }
+            0xB9 => {
+                self.cp(self.c);
+                4
+            }
+            0xBA => {
+                self.cp(self.d);
+                4
+            }
+            0xBB => {
+                self.cp(self.e);
+                4
+            }
+            0xBC => {
+                self.cp(self.h);
+                4
+            }
+            0xBD => {
+                self.cp(self.l);
+                4
+            }
+            0xBF => {
+                self.cp(self.a);
+                4
+            }
+
+            // Special Case: CP (HL)
+            // Compare A with value in memory at HL
+            0xBE => {
+                let hl = self.get_hl();
+                let val = self.bus.read_byte(hl);
+                self.cp(val);
+                8
+            }
+
+            // Special Case: CP d8 (Immediate)
+            // Compare A with the next byte in code
+            0xFE => {
+                let val = self.next_u8();
+                self.cp(val);
+                8
             }
             _ => {
                 println!("Unknown Opcode: {:#02X} at {:#04X}", opcode, self.pc - 1);
