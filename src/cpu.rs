@@ -1,3 +1,5 @@
+use std::result;
+
 use crate::bus::Bus;
 const Z_FLAG: u8 = 0b1000_0000;
 const N_FLAG: u8 = 0b0100_0000;
@@ -137,6 +139,13 @@ impl Cpu {
 
         result
     }
+    fn inc(&mut self, value: u8) -> u8 {
+        let result = value.wrapping_add(1);
+        self.set_z(result == 0);
+        self.set_n(false);
+        self.set_h((value & 0x0F) == 0x0F);
+        result
+    }
 
     fn jr(&mut self, condition: bool) -> u8 {
         let offset = self.bus.read_byte(self.pc) as i8;
@@ -155,6 +164,34 @@ impl Cpu {
         self.set_n(true);
         self.set_h((self.a & 0x0F) < (n & 0x0F));
         self.set_c(carry);
+    }
+    fn or(&mut self, value: u8) {
+        self.a |= value;
+
+        self.set_z(self.a == 0);
+        self.set_n(false);
+        self.set_h(false);
+        self.set_c(false);
+    }
+    fn push_stack(&mut self, value: u16) {
+        self.sp = self.sp.wrapping_sub(1);
+        self.bus
+            .write_byte(self.sp, (((value & 0xFF00) >> 8) as u8));
+        self.sp = self.sp.wrapping_sub(1);
+        self.bus
+            .write_byte(self.sp, (((value & 0x00FF) >> 8) as u8));
+    }
+
+    fn pop_stack(&mut self) -> u16 {
+        let low = self.bus.read_byte(self.sp) as u16;
+        self.sp = self.sp.wrapping_add(1);
+        let high = self.bus.read_byte(self.sp) as u16;
+        self.sp = self.sp.wrapping_add(1);
+        (high << 8) | low
+    }
+    fn rst(&mut self, address: u16) {
+        self.push_stack(self.pc);
+        self.pc = address;
     }
 }
 
@@ -420,6 +457,513 @@ impl Cpu {
                 self.cp(val);
                 8
             }
+            0xEA => {
+                let address = self.next_u16();
+                self.bus.write_byte(address, self.a);
+                16
+            }
+            0xFA => {
+                let address = self.next_u16();
+                self.a = self.bus.read_byte(address);
+                16
+            }
+            0x2A => {
+                let hl = self.get_hl();
+                self.a = self.bus.read_byte(hl);
+                self.set_hl(hl.wrapping_add(1));
+                8
+            }
+            0xCD => {
+                let target = self.next_u16();
+                self.push_stack(self.pc);
+                self.pc = target;
+                24
+            }
+
+            0x01 => {
+                let val = self.next_u16();
+                self.set_bc(val);
+                12
+            }
+
+            0x11 => {
+                let val = self.next_u16();
+                self.set_de(val);
+                12
+            }
+            // --- DEC rr Family (Decrement 16-bit) ---
+            // Flags: None affected
+            0x0B => {
+                let val = self.get_bc().wrapping_sub(1);
+                self.set_bc(val);
+                8
+            }
+            0x1B => {
+                let val = self.get_de().wrapping_sub(1);
+                self.set_de(val);
+                8
+            }
+            0x2B => {
+                let val = self.get_hl().wrapping_sub(1);
+                self.set_hl(val);
+                8
+            }
+            0x3B => {
+                self.sp = self.sp.wrapping_sub(1);
+                8
+            }
+            // --- LD A, r8 Group (Load into A) ---
+            0x78 => {
+                self.a = self.b;
+                4
+            }
+
+            0x79 => {
+                self.a = self.c;
+                4
+            }
+
+            0x7A => {
+                self.a = self.d;
+                4
+            }
+
+            0x7B => {
+                self.a = self.e;
+                4
+            }
+
+            0x7C => {
+                self.a = self.h;
+                4
+            }
+            0x7D => {
+                self.a = self.l;
+                4
+            }
+            0x7E => {
+                let hl = self.get_hl();
+                self.a = self.bus.read_byte(hl);
+                8
+            }
+            0x7F => {
+                self.a = self.a;
+                4
+            }
+            // --- OR r8 Family ---
+            0xB0 => {
+                self.or(self.b);
+                4
+            }
+            0xB1 => {
+                self.or(self.c);
+                4
+            }
+            0xB2 => {
+                self.or(self.d);
+                4
+            }
+            0xB3 => {
+                self.or(self.e);
+                4
+            }
+            0xB4 => {
+                self.or(self.h);
+                4
+            }
+            0xB5 => {
+                self.or(self.l);
+                4
+            }
+            0xB7 => {
+                self.or(self.a);
+                4
+            }
+            0xB6 => {
+                let hl = self.get_hl();
+                let val = self.bus.read_byte(hl);
+                self.or(val);
+                8
+            }
+            0xF6 => {
+                let val = self.next_u8();
+                self.or(val);
+                8
+            }
+            // --- RET Family (Return from Subroutine) ---
+            0xC9 => {
+                self.pc = self.pop_stack();
+                16
+            }
+
+            0xC0 => {
+                if !self.get_z() {
+                    self.pc = self.pop_stack();
+                    20
+                } else {
+                    8
+                }
+            }
+
+            0xC8 => {
+                if self.get_z() {
+                    self.pc = self.pop_stack();
+                    20
+                } else {
+                    8
+                }
+            }
+
+            0xD0 => {
+                if !self.get_c() {
+                    self.pc = self.pop_stack();
+                    20
+                } else {
+                    8
+                }
+            }
+
+            0xD8 => {
+                if self.get_c() {
+                    self.pc = self.pop_stack();
+                    20
+                } else {
+                    8
+                }
+            }
+
+            0xD9 => {
+                self.pc = self.pop_stack();
+                self.ime = true;
+                16
+            }
+            // --- PUSH rr Family ---
+            0xC5 => {
+                let val = self.get_bc();
+                self.push_stack(val);
+                16
+            }
+            0xD5 => {
+                let val = self.get_de();
+                self.push_stack(val);
+                16
+            }
+            0xE5 => {
+                let val = self.get_hl();
+                self.push_stack(val);
+                16
+            }
+            0xF5 => {
+                let val = self.get_af();
+                self.push_stack(val);
+                16
+            }
+            // --- POP rr Family ---
+            0xC1 => {
+                let val = self.pop_stack();
+                self.set_bc(val);
+                12
+            }
+            0xD1 => {
+                let val = self.pop_stack();
+                self.set_de(val);
+                12
+            }
+            0xE1 => {
+                let val = self.pop_stack();
+                self.set_hl(val);
+                12
+            }
+            0xF1 => {
+                let val = self.pop_stack();
+                self.set_af(val);
+                12
+            }
+
+            // --- INC r8 Family ---
+            0x04 => {
+                self.b = self.inc(self.b);
+                4
+            }
+            0x0C => {
+                self.c = self.inc(self.c);
+                4
+            }
+            0x14 => {
+                self.d = self.inc(self.d);
+                4
+            }
+            0x1C => {
+                self.e = self.inc(self.e);
+                4
+            }
+            0x24 => {
+                self.h = self.inc(self.h);
+                4
+            }
+            0x2C => {
+                self.l = self.inc(self.l);
+                4
+            }
+            0x3C => {
+                self.a = self.inc(self.a);
+                4
+            }
+            0x34 => {
+                let hl = self.get_hl();
+                let val = self.bus.read_byte(hl);
+                let result = self.inc(val);
+                self.bus.write_byte(hl, result);
+                12
+            }
+
+            // --- LD r8, r8 Family ---
+
+            // Destination B (0x40 - 0x47)
+            0x40 => {
+                self.b = self.b;
+                4
+            }
+            0x41 => {
+                self.b = self.c;
+                4
+            }
+            0x42 => {
+                self.b = self.d;
+                4
+            }
+            0x43 => {
+                self.b = self.e;
+                4
+            }
+            0x44 => {
+                self.b = self.h;
+                4
+            }
+            0x45 => {
+                self.b = self.l;
+                4
+            }
+            0x46 => {
+                self.b = self.bus.read_byte(self.get_hl());
+                8
+            }
+            0x47 => {
+                self.b = self.a;
+                4
+            }
+
+            // Destination C (0x48 - 0x4F)
+            0x48 => {
+                self.c = self.b;
+                4
+            }
+            0x49 => {
+                self.c = self.c;
+                4
+            }
+            0x4A => {
+                self.c = self.d;
+                4
+            }
+            0x4B => {
+                self.c = self.e;
+                4
+            }
+            0x4C => {
+                self.c = self.h;
+                4
+            }
+            0x4D => {
+                self.c = self.l;
+                4
+            }
+            0x4E => {
+                self.c = self.bus.read_byte(self.get_hl());
+                8
+            }
+            0x4F => {
+                self.c = self.a;
+                4
+            }
+
+            // Destination D (0x50 - 0x57)
+            0x50 => {
+                self.d = self.b;
+                4
+            }
+            0x51 => {
+                self.d = self.c;
+                4
+            }
+            0x52 => {
+                self.d = self.d;
+                4
+            }
+            0x53 => {
+                self.d = self.e;
+                4
+            }
+            0x54 => {
+                self.d = self.h;
+                4
+            }
+            0x55 => {
+                self.d = self.l;
+                4
+            }
+            0x56 => {
+                self.d = self.bus.read_byte(self.get_hl());
+                8
+            }
+            0x57 => {
+                self.d = self.a;
+                4
+            }
+
+            // Destination E (0x58 - 0x5F)
+            0x58 => {
+                self.e = self.b;
+                4
+            }
+            0x59 => {
+                self.e = self.c;
+                4
+            }
+            0x5A => {
+                self.e = self.d;
+                4
+            }
+            0x5B => {
+                self.e = self.e;
+                4
+            }
+            0x5C => {
+                self.e = self.h;
+                4
+            }
+            0x5D => {
+                self.e = self.l;
+                4
+            }
+            0x5E => {
+                self.e = self.bus.read_byte(self.get_hl());
+                8
+            }
+            0x5F => {
+                self.e = self.a;
+                4
+            }
+
+            // Destination H (0x60 - 0x67)
+            0x60 => {
+                self.h = self.b;
+                4
+            }
+            0x61 => {
+                self.h = self.c;
+                4
+            }
+            0x62 => {
+                self.h = self.d;
+                4
+            }
+            0x63 => {
+                self.h = self.e;
+                4
+            }
+            0x64 => {
+                self.h = self.h;
+                4
+            }
+            0x65 => {
+                self.h = self.l;
+                4
+            }
+            0x66 => {
+                self.h = self.bus.read_byte(self.get_hl());
+                8
+            }
+            0x67 => {
+                self.h = self.a;
+                4
+            }
+
+            // Destination L (0x68 - 0x6F)
+            0x68 => {
+                self.l = self.b;
+                4
+            }
+            0x69 => {
+                self.l = self.c;
+                4
+            }
+            0x6A => {
+                self.l = self.d;
+                4
+            }
+            0x6B => {
+                self.l = self.e;
+                4
+            }
+            0x6C => {
+                self.l = self.h;
+                4
+            }
+            0x6D => {
+                self.l = self.l;
+                4
+            }
+            0x6E => {
+                self.l = self.bus.read_byte(self.get_hl());
+                8
+            }
+            0x6F => {
+                self.l = self.a;
+                4
+            }
+
+            // Destination (HL) (0x70 - 0x77)
+            0x70 => {
+                self.bus.write_byte(self.get_hl(), self.b);
+                8
+            }
+            0x71 => {
+                self.bus.write_byte(self.get_hl(), self.c);
+                8
+            }
+            0x72 => {
+                self.bus.write_byte(self.get_hl(), self.d);
+                8
+            }
+            0x73 => {
+                self.bus.write_byte(self.get_hl(), self.e);
+                8
+            }
+            0x74 => {
+                self.bus.write_byte(self.get_hl(), self.h);
+                8
+            }
+            0x75 => {
+                self.bus.write_byte(self.get_hl(), self.l);
+                8
+            }
+            // 0x76 => HALT (handled later)
+            0x77 => {
+                self.bus.write_byte(self.get_hl(), self.a);
+                8
+            }
+
+            // --- RST (Restart) Family ---
+
+            0xC7 => { self.rst(0x0000); 16 }
+            0xCF => { self.rst(0x0008); 16 }
+            0xD7 => { self.rst(0x0010); 16 }
+            0xDF => { self.rst(0x0018); 16 }
+            0xE7 => { self.rst(0x0020); 16 }
+            0xEF => { self.rst(0x0028); 16 }
+            0xF7 => { self.rst(0x0030); 16 }
+            0xFF => { self.rst(0x0038); 16 }
             _ => {
                 println!("Unknown Opcode: {:#02X} at {:#04X}", opcode, self.pc - 1);
                 0
