@@ -16,7 +16,7 @@ pub struct Cpu {
     pub l: u8,
     pub sp: u16,
     pub pc: u16,
-    pub f: u8,
+    f: u8,
 }
 
 impl Cpu {
@@ -106,5 +106,84 @@ impl Cpu {
     pub fn set_hl(&mut self, value: u16) {
         self.h = ((value & 0xFF00) >> 8) as u8;
         self.l = (value & 0x00FF) as u8;
+    }
+}
+
+//Helpers functions here
+impl Cpu {
+    fn xor_a(&mut self, value: u8) {
+        self.a ^= value;
+        self.f = 0;
+        self.set_z(self.a == 0);
+    }
+    fn next_u16(&mut self) -> u16 {
+                let low = self.bus.read_byte(self.pc) as u16;
+                let high = self.bus.read_byte(self.pc + 1) as u16;
+                self.pc = self.pc.wrapping_add(2);
+                (high << 8 | low)
+        
+    }
+}
+
+// Step function and instructions here
+impl Cpu {
+    pub fn step(&mut self) -> u8 {
+        let opcode = self.bus.read_byte(self.pc);
+        self.pc = self.pc.wrapping_add(1);
+        match opcode {
+            0x00 => 4, //NOP
+            0xC3 => {
+                let low = self.bus.read_byte(self.pc) as u16;
+                let high = self.bus.read_byte(self.pc + 1) as u16;
+                let target = (high << 8 | low);
+                self.pc = target;
+                16
+            }
+            0xA8 => {
+                self.xor_a(self.b);
+                4
+            }
+            0xA9 => {
+                self.xor_a(self.c);
+                4
+            }
+            0xAA => {
+                self.xor_a(self.d);
+                4
+            }
+            0xAB => {
+                self.xor_a(self.e);
+                4
+            }
+            0xAC => {
+                self.xor_a(self.h);
+                4
+            }
+            0xAD => {
+                self.xor_a(self.l);
+                4
+            }
+
+            0xAE => {
+                let hl = self.get_hl();
+                let val = self.bus.read_byte(hl);
+                self.xor_a(val);
+                8
+            }
+
+            0xAF => {
+                self.xor_a(self.a);
+                4
+            }
+            0x21 => {
+                let val = self.next_u16();
+                self.set_hl(val);
+                12
+            }
+            _ => {
+                println!("Unknown Opcode: {:#02X} at {:#04X}", opcode, self.pc - 1);
+                0
+            }
+        }
     }
 }

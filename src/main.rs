@@ -9,14 +9,16 @@ use cpu::Cpu;
 use crate::cartridge::Cartridge;
 
 fn main() {
-    let cart = Cartridge::new("tetris.gb");
-    println!("{:#?}", cart.as_ref().unwrap().header);
-    match cart.unwrap().verify_checksum() {
-        true => {
-            println!("Verifcation Successful!");
+    let bus = Bus::new(Cartridge::new("tetris.gb").unwrap());
+    let mut cpu = Cpu::new(bus);
+
+    loop {
+        let cycles = cpu.step();    
+        if cycles == 0 {
+            println!("Emulator crashed!");
+            break;
         }
-        false => {
-            println!("Failed to verify checksum");
-        }
+        
+       
     }
 }
