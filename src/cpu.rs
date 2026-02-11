@@ -117,11 +117,18 @@ impl Cpu {
         self.set_z(self.a == 0);
     }
     fn next_u16(&mut self) -> u16 {
-                let low = self.bus.read_byte(self.pc) as u16;
-                let high = self.bus.read_byte(self.pc + 1) as u16;
-                self.pc = self.pc.wrapping_add(2);
-                (high << 8 | low)
-        
+        let low = self.bus.read_byte(self.pc) as u16;
+        let high = self.bus.read_byte(self.pc + 1) as u16;
+        self.pc = self.pc.wrapping_add(2);
+        (high << 8 | low)
+    }
+    fn dec(&mut self, value: u8) -> u8 {
+        let result = value.wrapping_sub(1);
+        self.set_z(result == 0);
+        self.set_n(true);
+        self.set_h((value & 0x0F) == 0);
+
+        result
     }
 }
 
@@ -178,6 +185,102 @@ impl Cpu {
             0x21 => {
                 let val = self.next_u16();
                 self.set_hl(val);
+                12
+            }
+
+            // --- LD r, d8 Group (Load Immediate 8-bit) ---
+            // Cycles: 8
+            0x06 => {
+                let val = self.bus.read_byte(self.pc);
+                self.pc = self.pc.wrapping_add(1);
+                self.b = val;
+                8
+            }
+            0x0E => {
+                let val = self.bus.read_byte(self.pc);
+                self.pc = self.pc.wrapping_add(1);
+                self.c = val;
+                8
+            }
+            0x16 => {
+                let val = self.bus.read_byte(self.pc);
+                self.pc = self.pc.wrapping_add(1);
+                self.d = val;
+                8
+            }
+            0x1E => {
+                let val = self.bus.read_byte(self.pc);
+                self.pc = self.pc.wrapping_add(1);
+                self.e = val;
+                8
+            }
+            0x26 => {
+                let val = self.bus.read_byte(self.pc);
+                self.pc = self.pc.wrapping_add(1);
+                self.h = val;
+                8
+            }
+            0x2E => {
+                let val = self.bus.read_byte(self.pc);
+                self.pc = self.pc.wrapping_add(1);
+                self.l = val;
+                8
+            }
+            // Special Case: LD (HL), d8
+            // Writes the immediate value to the memory address at HL
+            // Cycles: 12
+            0x36 => {
+                let val = self.bus.read_byte(self.pc);
+                self.pc = self.pc.wrapping_add(1);
+                let hl = self.get_hl();
+                self.bus.write_byte(hl, val);
+                12
+            }
+            0x32 => {
+                let mut hl = self.get_hl();
+                self.bus.write_byte(hl, self.a);
+                self.set_hl(hl.wrapping_sub(1));
+                8
+            }
+            // --- DEC r8 Family (Decrement 8-bit) ---
+            // Cycles: 4
+            0x05 => {
+                self.b = self.dec(self.b);
+                4
+            }
+            0x0D => {
+                self.c = self.dec(self.c);
+                4
+            }
+            0x15 => {
+                self.d = self.dec(self.d);
+                4
+            }
+            0x1D => {
+                self.e = self.dec(self.e);
+                4
+            }
+            0x25 => {
+                self.h = self.dec(self.h);
+                4
+            }
+            0x2D => {
+                self.l = self.dec(self.l);
+                4
+            }
+            0x3D => {
+                self.a = self.dec(self.a);
+                4
+            }
+
+            // Special Case: DEC (HL)
+            // Read from memory, decrement, write back.
+            // Cycles: 12 (4 for opcode + 4 for read + 4 for write)
+            0x35 => {
+                let hl = self.get_hl();
+                let val = self.bus.read_byte(hl);
+                let result = self.dec(val);
+                self.bus.write_byte(hl, result);
                 12
             }
             _ => {
