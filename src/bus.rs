@@ -8,6 +8,7 @@ pub struct Bus {
     pub vram: [u8; 8192],
     wram: [u8; 8192],
     hram: [u8; 127],
+    pub ly: u8, 
 }
 
 impl Bus {
@@ -20,11 +21,17 @@ impl Bus {
             wram: [0; 8192],
             hram: [0; 127],
             oam: [0; 160],
+            ly: 0,
         }
     }
 
-    pub fn read_byte(&self, address: u16) -> u8 {
+    pub fn read_byte(&mut self, address: u16) -> u8 {
         match address {
+            0xFF44 => {
+                // Increment LY to simulate drawing (Hack for now)
+                self.ly = (self.ly + 1) % 154;
+                self.ly
+            }
             0xFF0F => self.int_flag,
             0xFFFF => self.ie_reg,
             0x0000..=0x7FFF => self.cartridge.read(address),
