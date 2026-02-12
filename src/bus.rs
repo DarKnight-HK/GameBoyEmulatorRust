@@ -1,5 +1,5 @@
 use crate::cartridge::Cartridge;
-
+#[warn(dead_code)]
 pub struct Bus {
     cartridge: Cartridge,
     pub ie_reg: u8,   // 0xFFFF
@@ -8,7 +8,7 @@ pub struct Bus {
     pub vram: [u8; 8192],
     wram: [u8; 8192],
     hram: [u8; 127],
-    pub ly: u8, 
+    pub ly: u8,
 }
 
 impl Bus {
@@ -51,8 +51,6 @@ impl Bus {
             0xFF00..=0xFF7F => 0x00,
 
             0xFF80..=0xFFFE => self.hram[(address - 0xFF80) as usize],
-
-            0xFFFF => 0x00,
         }
     }
 

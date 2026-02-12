@@ -1,5 +1,3 @@
-use std::result;
-
 use crate::bus::Bus;
 const Z_FLAG: u8 = 0b1000_0000;
 const N_FLAG: u8 = 0b0100_0000;
@@ -175,11 +173,9 @@ impl Cpu {
     }
     fn push_stack(&mut self, value: u16) {
         self.sp = self.sp.wrapping_sub(1);
-        self.bus
-            .write_byte(self.sp, (((value & 0xFF00) >> 8) as u8));
+        self.bus.write_byte(self.sp, ((value & 0xFF00) >> 8) as u8);
         self.sp = self.sp.wrapping_sub(1);
-        self.bus
-            .write_byte(self.sp, (((value & 0x00FF) >> 8) as u8));
+        self.bus.write_byte(self.sp, ((value & 0x00FF) >> 8) as u8);
     }
 
     fn pop_stack(&mut self) -> u16 {
@@ -207,7 +203,7 @@ impl Cpu {
             0xC3 => {
                 let low = self.bus.read_byte(self.pc) as u16;
                 let high = self.bus.read_byte(self.pc + 1) as u16;
-                let target = (high << 8 | low);
+                let target = high << 8 | low;
                 self.pc = target;
                 16
             }
@@ -258,7 +254,7 @@ impl Cpu {
             }
 
             0x32 => {
-                let mut hl = self.get_hl();
+                let hl = self.get_hl();
                 self.bus.write_byte(hl, self.a);
                 self.set_hl(hl.wrapping_sub(1));
                 8
@@ -546,10 +542,7 @@ impl Cpu {
                 self.a = self.bus.read_byte(hl);
                 8
             }
-            0x7F => {
-                self.a = self.a;
-                4
-            }
+            0x7F => 4,
             // --- OR r8 Family ---
             0xB0 => {
                 self.or(self.b);
@@ -720,10 +713,7 @@ impl Cpu {
             // --- LD r8, r8 Family ---
 
             // Destination B (0x40 - 0x47)
-            0x40 => {
-                self.b = self.b;
-                4
-            }
+            0x40 => 4,
             0x41 => {
                 self.b = self.c;
                 4
@@ -758,10 +748,7 @@ impl Cpu {
                 self.c = self.b;
                 4
             }
-            0x49 => {
-                self.c = self.c;
-                4
-            }
+            0x49 => 4,
             0x4A => {
                 self.c = self.d;
                 4
@@ -796,10 +783,7 @@ impl Cpu {
                 self.d = self.c;
                 4
             }
-            0x52 => {
-                self.d = self.d;
-                4
-            }
+            0x52 => 4,
             0x53 => {
                 self.d = self.e;
                 4
@@ -834,10 +818,7 @@ impl Cpu {
                 self.e = self.d;
                 4
             }
-            0x5B => {
-                self.e = self.e;
-                4
-            }
+            0x5B => 4,
             0x5C => {
                 self.e = self.h;
                 4
@@ -872,10 +853,7 @@ impl Cpu {
                 self.h = self.e;
                 4
             }
-            0x64 => {
-                self.h = self.h;
-                4
-            }
+            0x64 => 4,
             0x65 => {
                 self.h = self.l;
                 4
@@ -910,10 +888,7 @@ impl Cpu {
                 self.l = self.h;
                 4
             }
-            0x6D => {
-                self.l = self.l;
-                4
-            }
+            0x6D => 4,
             0x6E => {
                 self.l = self.bus.read_byte(self.get_hl());
                 8
@@ -955,15 +930,38 @@ impl Cpu {
             }
 
             // --- RST (Restart) Family ---
-
-            0xC7 => { self.rst(0x0000); 16 }
-            0xCF => { self.rst(0x0008); 16 }
-            0xD7 => { self.rst(0x0010); 16 }
-            0xDF => { self.rst(0x0018); 16 }
-            0xE7 => { self.rst(0x0020); 16 }
-            0xEF => { self.rst(0x0028); 16 }
-            0xF7 => { self.rst(0x0030); 16 }
-            0xFF => { self.rst(0x0038); 16 }
+            0xC7 => {
+                self.rst(0x0000);
+                16
+            }
+            0xCF => {
+                self.rst(0x0008);
+                16
+            }
+            0xD7 => {
+                self.rst(0x0010);
+                16
+            }
+            0xDF => {
+                self.rst(0x0018);
+                16
+            }
+            0xE7 => {
+                self.rst(0x0020);
+                16
+            }
+            0xEF => {
+                self.rst(0x0028);
+                16
+            }
+            0xF7 => {
+                self.rst(0x0030);
+                16
+            }
+            0xFF => {
+                self.rst(0x0038);
+                16
+            }
             _ => {
                 println!("Unknown Opcode: {:#02X} at {:#04X}", opcode, self.pc - 1);
                 0
