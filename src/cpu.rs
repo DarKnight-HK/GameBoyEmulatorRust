@@ -191,6 +191,110 @@ impl Cpu {
     }
 }
 
+//Helpers for CB instructions
+impl Cpu {
+    fn get_cb_reg(&mut self, index: u8) -> u8 {
+        match index {
+            0 => self.b,
+            1 => self.c,
+            2 => self.d,
+            3 => self.e,
+            4 => self.h,
+            5 => self.l,
+            6 => self.bus.read_byte(self.get_hl()),
+            7 => self.a,
+            _ => unreachable!(),
+        }
+    }
+
+    fn set_cb_reg(&mut self, index: u8, val: u8) {
+        match index {
+            0 => self.b = val,
+            1 => self.c = val,
+            2 => self.d = val,
+            3 => self.e = val,
+            4 => self.h = val,
+            5 => self.l = val,
+            6 => self.bus.write_byte(self.get_hl(), val),
+            7 => self.a = val,
+            _ => unreachable!(),
+        }
+    }
+
+    fn rlc(&mut self, value: u8) -> u8 {
+        let carry = (value & 0x80) != 0;
+        let result = (value << 1) | (if carry { 1 } else { 0 });
+        self.set_z(result == 0);
+        self.set_n(false);
+        self.set_h(false);
+        self.set_c(carry);
+        result
+    }
+    fn rrc(&mut self, value: u8) -> u8 {
+        let carry = (value & 0x01) != 0;
+        let result = (value >> 1) | (if carry { 0x80 } else { 0 });
+        self.set_z(result == 0);
+        self.set_n(false);
+        self.set_h(false);
+        self.set_c(carry);
+        result
+    }
+
+    fn rl(&mut self, value: u8) -> u8 {
+        let new_carry = (value & 0x80) != 0;
+        let result = (value << 1) | (if self.get_c() { 1 } else { 0 });
+        self.set_z(result == 0);
+        self.set_n(false);
+        self.set_h(false);
+        self.set_c(new_carry);
+        result
+    }
+    fn rr(&mut self, value: u8) -> u8 {
+        let new_carry = (value & 0x01) != 0;
+        let result = (value >> 1) | (if self.get_c() { 0x80 } else { 0 });
+        self.set_z(result == 0);
+        self.set_n(false);
+        self.set_h(false);
+        self.set_c(new_carry);
+        result
+    }
+    fn sla(&mut self, value: u8) -> u8 {
+        let carry = (value & 0x80) != 0;
+        let result = value << 1;
+        self.set_z(result == 0);
+        self.set_n(false);
+        self.set_h(false);
+        self.set_c(carry);
+        result
+    }
+    fn sra(&mut self, value: u8) -> u8 {
+        let carry = (value & 0x01) != 0;
+        let result = (value >> 1) | (value & 0x80);
+        self.set_z(result == 0);
+        self.set_n(false);
+        self.set_h(false);
+        self.set_c(carry);
+        result
+    }
+    fn swap(&mut self, value: u8) -> u8 {
+        let result = ((value & 0x0F) << 4) | ((value & 0xF0) >> 4);
+        self.set_z(result == 0);
+        self.set_n(false);
+        self.set_h(false);
+        self.set_c(false);
+        result
+    }
+    fn srl(&mut self, value: u8) -> u8 {
+        let carry = (value & 0x01) != 0;
+        let result = value >> 1;
+        self.set_z(result == 0);
+        self.set_n(false);
+        self.set_h(false);
+        self.set_c(carry);
+        result
+    }
+}
+
 // Step function and instructions here
 // https://gbdev.io/gb-opcodes/optables/
 // https://rgbds.gbdev.io/docs/v1.0.1/gbz80.7
@@ -872,10 +976,7 @@ impl Cpu {
                 self.l = self.b;
                 4
             }
-            0x69 => {
-                self.l = self.c;
-                4
-            }
+            0x69 => 4,
             0x6A => {
                 self.l = self.d;
                 4
@@ -962,10 +1063,72 @@ impl Cpu {
                 self.rst(0x0038);
                 16
             }
+            0xCB => self.step_cb(),
             _ => {
                 println!("Unknown Opcode: {:#02X} at {:#04X}", opcode, self.pc - 1);
                 0
             }
         }
+    }
+}
+
+// CB instructions
+
+impl Cpu {
+    pub fn step_cb(&mut self) -> u8 {
+        let opcode = self.next_u8();
+        let reg_idx = opcode & 0x07;
+        let bit_idx = (opcode >> 3) & 0x07;
+        let group = (opcode >> 6) & 0x03;
+        let cycles = if reg_idx == 6 {
+            if group == 1 { 12 } else { 16 }
+        } else {
+            8
+        };
+
+        match group {
+            // Group 0: Rotates and Shifts
+            0 => {
+                let val = self.get_cb_reg(reg_idx);
+                let result = match bit_idx {
+                    0 => self.rlc(val),  // RLC
+                    1 => self.rrc(val),  // RRC
+                    2 => self.rl(val),   // RL
+                    3 => self.rr(val),   // RR
+                    4 => self.sla(val),  // SLA
+                    5 => self.sra(val),  // SRA
+                    6 => self.swap(val), // SWAP
+                    7 => self.srl(val),  // SRL
+                    _ => unreachable!(),
+                };
+                self.set_cb_reg(reg_idx, result);
+            }
+
+            // Group 1: BIT (Test Bit)
+            1 => {
+                let val = self.get_cb_reg(reg_idx);
+                let is_zero = (val & (1 << bit_idx)) == 0;
+                self.set_z(is_zero);
+                self.set_n(false);
+                self.set_h(true); // BIT always sets H=1
+            }
+
+            // Group 2: RES (Reset Bit)
+            2 => {
+                let val = self.get_cb_reg(reg_idx);
+                let result = val & !(1 << bit_idx);
+                self.set_cb_reg(reg_idx, result);
+            }
+
+            // Group 3: SET (Set Bit)
+            3 => {
+                let val = self.get_cb_reg(reg_idx);
+                let result = val | (1 << bit_idx);
+                self.set_cb_reg(reg_idx, result);
+            }
+
+            _ => unreachable!(),
+        }
+        cycles
     }
 }

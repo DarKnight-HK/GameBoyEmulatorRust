@@ -9,7 +9,7 @@ use cpu::Cpu;
 use crate::cartridge::Cartridge;
 
 fn main() {
-    let bus = Bus::new(Cartridge::new("tetris.gb").unwrap());
+    let bus = Bus::new(Cartridge::new("cpu_instrs.gb").unwrap());
     let mut cpu = Cpu::new(bus);
 
     loop {
