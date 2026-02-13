@@ -22,23 +22,23 @@ impl Timer {
         let old_div = self.div;
         self.div = self.div.wrapping_add(cycles as u16);
         let clock_select = self.tac & 0x03;
-        let timer_enabled = self.tac & 0x04 != 0;
+        let timer_enabled = (self.tac & 0x04) != 0;
         // read timer's obscure behavior on pandocs
-        if timer_enabled {
-            let bit_pos: u8 = match clock_select {
-                0 => 9,
-                1 => 3,
-                2 => 5,
-                3 => 7,
-                _ => unreachable!(),
-            };
-            let old_bit = (old_div >> bit_pos) & 1;
-            let new_bit = (self.div >> bit_pos) & 1;
 
-            if old_bit == 1 && new_bit == 0 {
-                return self.increment_tima();
-            }
+        let bit_pos: u8 = match clock_select {
+            0 => 9,
+            1 => 3,
+            2 => 5,
+            3 => 7,
+            _ => unreachable!(),
+        };
+        let old_bit = (old_div >> bit_pos) & 1;
+        let new_bit = (self.div >> bit_pos) & 1;
+
+        if timer_enabled && old_bit == 1 && new_bit == 0 {
+            return self.increment_tima();
         }
+
         false // No interrupt
     }
 
