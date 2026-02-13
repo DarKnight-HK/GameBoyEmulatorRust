@@ -1,6 +1,7 @@
 use crate::cartridge::Cartridge;
-#[warn(dead_code)]
+use crate::timer::Timer;
 pub struct Bus {
+    pub timer: Timer,
     cartridge: Cartridge,
     pub ie_reg: u8,   // 0xFFFF
     pub int_flag: u8, // 0xFF0F
@@ -14,6 +15,7 @@ pub struct Bus {
 impl Bus {
     pub fn new(cartridge: Cartridge) -> Self {
         Bus {
+            timer: Timer::new(),
             ie_reg: 0,
             int_flag: 0,
             cartridge,
@@ -34,6 +36,7 @@ impl Bus {
             }
             0xFF0F => self.int_flag,
             0xFFFF => self.ie_reg,
+            0xFF04..=0xFF07 => self.timer.read(address),
             0x0000..=0x7FFF => self.cartridge.read(address),
 
             0x8000..=0x9FFF => self.vram[(address - 0x8000) as usize],
@@ -64,8 +67,9 @@ impl Bus {
                 match address {
                     0xFF0F => self.int_flag = byte,
                     0xFF44 => {} // LY is Read-Only. Ignore writes.
+                    0xFF04..=0xFF07 => self.timer.write(address, byte),
                     _ => {
-                        // For now, ignore other IO writes (Serial, Timer, Audio)
+                        // For now, ignore other IO writes (Serial, Audio)
                     }
                 }
             }
@@ -75,6 +79,11 @@ impl Bus {
             }
 
             _ => {}
+        }
+    }
+    pub fn tick(&mut self, cycles: u8) {
+        if self.timer.tick(cycles) {
+            self.int_flag |= 0x04;
         }
     }
 }

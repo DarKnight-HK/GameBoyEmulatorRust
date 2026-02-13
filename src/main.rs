@@ -2,6 +2,7 @@ mod bus;
 mod cartridge;
 mod cpu;
 mod ppu;
+mod timer;
 
 use bus::Bus;
 use cpu::Cpu;
@@ -14,7 +15,7 @@ fn main() {
 
     loop {
         let cycles = cpu.step();
-
+        cpu.bus.tick(cycles);
         if cycles == 0 {
             println!("Crash detected!");
             break;
