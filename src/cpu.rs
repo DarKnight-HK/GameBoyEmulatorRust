@@ -1,4 +1,5 @@
 use crate::bus::Bus;
+use crate::interrupts::Interrupt;
 const Z_FLAG: u8 = 0b1000_0000;
 const N_FLAG: u8 = 0b0100_0000;
 const H_FLAG: u8 = 0b0010_0000;
@@ -18,6 +19,7 @@ pub struct Cpu {
     pub pc: u16,
     pub f: u8,
     pub ime: bool,
+    pub is_sleeping: bool,
 }
 
 impl Cpu {
@@ -35,6 +37,7 @@ impl Cpu {
             sp: 0xFFFE,
             pc: 0x0100,
             ime: false,
+            is_sleeping: false,
         }
     }
     pub fn get_z(&self) -> bool {
@@ -108,6 +111,28 @@ impl Cpu {
     pub fn set_hl(&mut self, value: u16) {
         self.h = ((value & 0xFF00) >> 8) as u8;
         self.l = (value & 0x00FF) as u8;
+    }
+
+    pub fn check_interrupts(&mut self) {
+        let int_flag = self.bus.int_flag;
+        let ie_reg = self.bus.ie_reg;
+        for interrupt in Interrupt::iterate() {
+            let mask = interrupt.mask();
+            if (int_flag & mask) != 0 && (ie_reg & mask) != 0 {
+                self.is_sleeping = false;
+                if self.ime {
+                
+                    self.handle_interrupt(interrupt);
+                }
+                return;
+            }
+        }
+    }
+    pub fn handle_interrupt(&mut self, interrupt: Interrupt) {
+        self.ime = false;
+        self.bus.int_flag &= !interrupt.mask();
+        self.push_stack(self.pc);
+        self.pc = interrupt.handler_address();
     }
 }
 
@@ -300,6 +325,9 @@ impl Cpu {
 // https://rgbds.gbdev.io/docs/v1.0.1/gbz80.7
 impl Cpu {
     pub fn step(&mut self) -> u8 {
+        if self.is_sleeping {
+            return 4;
+        }
         let opcode = self.bus.read_byte(self.pc);
         self.pc = self.pc.wrapping_add(1);
         match opcode {
@@ -1024,7 +1052,7 @@ impl Cpu {
                 self.bus.write_byte(self.get_hl(), self.l);
                 8
             }
-            // 0x76 => HALT (handled later)
+
             0x77 => {
                 self.bus.write_byte(self.get_hl(), self.a);
                 8
@@ -1062,6 +1090,10 @@ impl Cpu {
             0xFF => {
                 self.rst(0x0038);
                 16
+            }
+            0x76 => {
+                self.is_sleeping = true;
+                4
             }
             0xCB => self.step_cb(),
             _ => {

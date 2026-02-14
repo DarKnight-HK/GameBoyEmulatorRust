@@ -9,8 +9,8 @@ pub enum Interrupt {
 }
 
 impl Interrupt {
-    pub fn handle_address(&self) -> u16
-    {
+    // Returns the vector address (Where to jump to)
+    pub fn handler_address(&self) -> u16 {
         match self {
             Interrupt::VBlank => 0x0040,
             Interrupt::LcdStat => 0x0048,
@@ -18,5 +18,20 @@ impl Interrupt {
             Interrupt::Serial => 0x0058,
             Interrupt::Joypad => 0x0060,
         }
+    }
+
+    // Returns the bit mask (e.g., 1, 2, 4, 8, 16)
+    pub fn mask(&self) -> u8 {
+        1 << (*self as u8)
+    }
+
+    pub fn iterate() -> [Interrupt; 5] {
+        [
+            Interrupt::VBlank,
+            Interrupt::LcdStat,
+            Interrupt::Timer,
+            Interrupt::Serial,
+            Interrupt::Joypad,
+        ]
     }
 }
