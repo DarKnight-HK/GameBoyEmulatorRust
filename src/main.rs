@@ -6,7 +6,7 @@ mod timer;
 mod interrupts;
 use bus::Bus;
 use cpu::Cpu;
-
+mod dma;
 use crate::cartridge::Cartridge;
 
 fn main() {

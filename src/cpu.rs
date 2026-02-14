@@ -121,7 +121,6 @@ impl Cpu {
             if (int_flag & mask) != 0 && (ie_reg & mask) != 0 {
                 self.is_sleeping = false;
                 if self.ime {
-                
                     self.handle_interrupt(interrupt);
                 }
                 return;
@@ -493,9 +492,6 @@ impl Cpu {
                 8
             }
 
-            // Special Case: LD (HL), d8
-            // 1. Read the immediate value
-            // 2. Write it to memory address (HL)
             0x36 => {
                 let val = self.next_u8();
                 let hl = self.get_hl();

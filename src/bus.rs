@@ -1,6 +1,8 @@
 use crate::cartridge::Cartridge;
+use crate::dma::Dma;
 use crate::timer::Timer;
 pub struct Bus {
+    pub dma: Dma,
     pub timer: Timer,
     cartridge: Cartridge,
     pub ie_reg: u8,   // 0xFFFF
@@ -15,6 +17,7 @@ pub struct Bus {
 impl Bus {
     pub fn new(cartridge: Cartridge) -> Self {
         Bus {
+            dma: Dma::new(),
             timer: Timer::new(),
             ie_reg: 0,
             int_flag: 0,
@@ -63,6 +66,10 @@ impl Bus {
             0x8000..=0x9FFF => self.vram[(address - 0x8000) as usize] = byte,
             0xA000..=0xBFFF => self.cartridge.write(address, byte),
             0xFE00..=0xFE9F => self.oam[(address - 0xFE00) as usize] = byte,
+            0xFF46 => {
+                self.dma.start(byte);
+                self.dma_transfer(byte); // Execute immediately for now!
+            }
             0xFF00..=0xFF7F => {
                 match address {
                     0xFF0F => self.int_flag = byte,
@@ -84,6 +91,14 @@ impl Bus {
     pub fn tick(&mut self, cycles: u8) {
         if self.timer.tick(cycles) {
             self.int_flag |= 0x04;
+        }
+    }
+
+    pub fn dma_transfer(&mut self, value: u8) {
+        let base = (value as u16) << 8;
+        for i in 0..160 {
+            let byte = self.read_byte(base + i);
+            self.write_byte(0xFE00 + i, byte);
         }
     }
 }
