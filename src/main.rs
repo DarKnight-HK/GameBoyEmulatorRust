@@ -34,6 +34,7 @@ fn main() {
     let mut buffer: Vec<u32> = vec![0; WIDTH * HEIGHT];
 
     let bus = Bus::new(Cartridge::new("tetris.gb").unwrap());
+
     let mut cpu = Cpu::new(bus);
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
