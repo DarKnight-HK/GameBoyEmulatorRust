@@ -11,6 +11,7 @@ pub struct Bus {
     cartridge: Cartridge,
     pub ie_reg: u8,
     pub int_flag: u8,
+    wram: [u8; 8192],
     hram: [u8; 127],
 }
 
@@ -23,6 +24,7 @@ impl Bus {
             cartridge,
             ie_reg: 0,
             int_flag: 0,
+            wram: [0; 8192],
             hram: [0; 127],
         }
     }
@@ -52,7 +54,7 @@ impl Bus {
             0x8000..=0x9FFF => self.ppu.read(address),
 
             0xA000..=0xBFFF => self.cartridge.read(address),
-            0xC000..=0xDFFF => 0,
+            0xC000..=0xDFFF => self.wram[(address - 0xC000) as usize],
             0xE000..=0xFDFF => 0,
 
             0xFE00..=0xFE9F => self.ppu.read(address),
@@ -79,7 +81,7 @@ impl Bus {
             0x8000..=0x9FFF => self.ppu.write(address, byte),
 
             0xA000..=0xBFFF => self.cartridge.write(address, byte),
-            0xC000..=0xDFFF => {} // WRAM Logic
+            0xC000..=0xDFFF => self.wram[(address - 0xC000) as usize] = byte, // WRAM Logic
 
             0xFE00..=0xFE9F => self.ppu.write(address, byte),
 

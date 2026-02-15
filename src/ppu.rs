@@ -91,6 +91,14 @@ impl Ppu {
     }
 
     pub fn tick(&mut self, cycles: u8) -> (bool, bool) {
-        todo!()
+        self.cycle_accumulator += cycles as u32;
+        if self.cycle_accumulator >= 456 {
+            self.cycle_accumulator -= 456;
+            self.ly = (self.ly + 1) % 154;
+            if self.ly == 144 {
+                return (true, false);
+            }
+        }
+        (false, false)
     }
 }

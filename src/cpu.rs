@@ -199,7 +199,7 @@ impl Cpu {
         self.sp = self.sp.wrapping_sub(1);
         self.bus.write_byte(self.sp, ((value & 0xFF00) >> 8) as u8);
         self.sp = self.sp.wrapping_sub(1);
-        self.bus.write_byte(self.sp, ((value & 0x00FF) >> 8) as u8);
+        self.bus.write_byte(self.sp, (value & 0x00FF) as u8);
     }
 
     fn pop_stack(&mut self) -> u16 {
@@ -1109,7 +1109,11 @@ impl Cpu {
         let bit_idx = (opcode >> 3) & 0x07;
         let group = (opcode >> 6) & 0x03;
         let cycles = if reg_idx == 6 {
-            if group == 1 { 12 } else { 16 }
+            if group == 1 {
+                12
+            } else {
+                16
+            }
         } else {
             8
         };

@@ -28,10 +28,7 @@ fn main() {
         panic!("{}", e);
     });
 
-    window.set_target_fps(10);
-
-    // format: 0x00RRGGBB (Red, Green, Blue)
-    let mut buffer: Vec<u32> = vec![0; WIDTH * HEIGHT];
+    window.set_target_fps(60);
 
     let bus = Bus::new(Cartridge::new("tetris.gb").unwrap());
 
@@ -39,11 +36,8 @@ fn main() {
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         cpu.step();
-
-        for pixel in buffer.iter_mut() {
-            let val = rand::random::<u8>() as u32;
-            *pixel = (val << 16) | (val << 8) | val;
-        }
-        window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
+        window
+            .update_with_buffer(&cpu.bus.ppu.buffer, WIDTH, HEIGHT)
+            .unwrap();
     }
 }
