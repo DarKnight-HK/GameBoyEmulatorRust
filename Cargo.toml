@@ -1,6 +1,8 @@
 [package]
 name = "GameBoyEmulator"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
+minifb = "0.28.0"
+rand = "0.10.0"
