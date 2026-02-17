@@ -90,15 +90,104 @@ impl Ppu {
         }
     }
 
+    // Returns (VBlank Interrupt, Stat Interrupt)
     pub fn tick(&mut self, cycles: u8) -> (bool, bool) {
+        let mut vblank_irq = false;
+        let mut stat_irq = false;
+
         self.cycle_accumulator += cycles as u32;
-        if self.cycle_accumulator >= 456 {
+
+        if self.ly >= 144 {
+            self.mode = PpuMode::VBlank;
+            if self.cycle_accumulator >= 456 {
+                self.cycle_accumulator -= 456;
+                self.ly += 1;
+
+                if self.ly >= 154 {
+                    self.ly = 0;
+                    self.mode = PpuMode::OamSearch;
+                }
+            }
+            return (
+                self.ly == 144 && self.cycle_accumulator < cycles as u32,
+                false,
+            );
+        }
+
+        // NORMAL LINE Handling (Lines 0-143)
+        if self.cycle_accumulator < 80 {
+            // Mode 2: OAM Scan
+            self.mode = PpuMode::OamSearch;
+        } else if self.cycle_accumulator < 252 {
+            // Mode 3: Pixel Transfer
+            self.mode = PpuMode::PixelTransfer;
+        } else if self.cycle_accumulator < 456 {
+            // Mode 0: H-Blank
+            if self.mode != PpuMode::HBlank {
+                self.mode = PpuMode::HBlank;
+                self.draw_scanline();
+            }
+        } else {
             self.cycle_accumulator -= 456;
-            self.ly = (self.ly + 1) % 154;
+            self.ly += 1;
+
             if self.ly == 144 {
-                return (true, false);
+                self.mode = PpuMode::VBlank;
+                vblank_irq = true;
+            } else {
+                self.mode = PpuMode::OamSearch;
             }
         }
-        (false, false)
+
+        (vblank_irq, stat_irq)
+    }
+    pub fn draw_scanline(&mut self) {
+        let y = self.ly as usize;
+        for x in 0..160 {
+            self.buffer[y * 160 + x] = 0x00FFFFFF; // White
+        }
+    }
+    pub fn is_lcd_enabled(&self) -> bool {
+        (self.lcdc & 0x80) != 0
+    }
+
+    pub fn window_tile_map_area(&self) -> u16 {
+        if (self.lcdc & 0x40) != 0 {
+            0x9C00
+        } else {
+            0x9800
+        }
+    }
+
+    pub fn is_window_enabled(&self) -> bool {
+        (self.lcdc & 0x20) != 0
+    }
+
+    pub fn tile_data_area(&self) -> u16 {
+        if (self.lcdc & 0x10) != 0 {
+            0x8000
+        } else {
+            0x8800
+        }
+    }
+
+    pub fn bg_tile_map_area(&self) -> u16 {
+        if (self.lcdc & 0x08) != 0 {
+            0x9C00
+        } else {
+            0x9800
+        }
+    }
+
+    pub fn obj_size(&self) -> bool {
+        (self.lcdc & 0x04) != 0
+    }
+
+    pub fn obj_enabled(&self) -> bool {
+        (self.lcdc & 0x02) != 0
+    }
+
+    pub fn bg_window_enabled(&self) -> bool {
+        (self.lcdc & 0x01) != 0
     }
 }

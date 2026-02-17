@@ -168,7 +168,6 @@ impl Cpu {
         self.set_h((value & 0x0F) == 0x0F);
         result
     }
-
     fn jr(&mut self, condition: bool) -> u8 {
         let offset = self.bus.read_byte(self.pc) as i8;
         self.pc = self.pc.wrapping_add(1);
@@ -179,7 +178,15 @@ impl Cpu {
             8
         }
     }
-
+    fn add_hl(&mut self, value: u16) {
+        let hl = self.get_hl();
+        let (result, carry) = hl.overflowing_add(value);
+        let h_check = (hl & 0x0FFF) + (value & 0x0FFF) > 0x0FFF;
+        self.set_hl(result);
+        self.set_n(false);
+        self.set_h(h_check);
+        self.set_c(carry);
+    }
     fn cp(&mut self, n: u8) {
         let (result, carry) = self.a.overflowing_sub(n);
         self.set_z(result == 0);
@@ -212,6 +219,33 @@ impl Cpu {
     fn rst(&mut self, address: u16) {
         self.push_stack(self.pc);
         self.pc = address;
+    }
+    fn and_a(&mut self, value: u8) {
+        self.a &= value;
+        self.set_z(self.a == 0);
+        self.set_n(false);
+        self.set_h(true);
+        self.set_c(false);
+    }
+    fn add(&mut self, value: u8) {
+        let (result, carry) = self.a.overflowing_add(value);
+        self.set_z(result == 0);
+        self.set_n(false);
+        self.set_h((self.a & 0x0F) + (value & 0x0F) > 0x0F);
+        self.set_c(carry);
+        self.a = result;
+    }
+
+    fn adc(&mut self, value: u8) {
+        let carry_in = if self.get_c() { 1 } else { 0 };
+        let (sum, carry1) = self.a.overflowing_add(value);
+        let (result, carry2) = sum.overflowing_add(carry_in);
+
+        self.set_z(result == 0);
+        self.set_n(false);
+        self.set_h((self.a & 0x0F) + (value & 0x0F) + carry_in > 0x0F);
+        self.set_c(carry1 || carry2);
+        self.a = result;
     }
 }
 
@@ -1090,6 +1124,263 @@ impl Cpu {
             0x76 => {
                 self.is_sleeping = true;
                 4
+            }
+            0x03 => {
+                let val = self.get_bc();
+                self.set_bc(val.wrapping_add(1));
+                8
+            }
+
+            0x13 => {
+                let val = self.get_de();
+                self.set_de(val.wrapping_add(1));
+                8
+            }
+
+            0x23 => {
+                let val = self.get_hl();
+                self.set_hl(val.wrapping_add(1));
+                8
+            }
+
+            0x33 => {
+                self.sp = self.sp.wrapping_add(1);
+                8
+            }
+            0x09 => {
+                self.add_hl(self.get_bc());
+                8
+            }
+
+            0x19 => {
+                self.add_hl(self.get_de());
+                8
+            }
+
+            0x29 => {
+                self.add_hl(self.get_hl());
+                8
+            }
+
+            0x39 => {
+                self.add_hl(self.sp);
+                8
+            }
+
+            // --- AND r8 Family (Bitwise AND) ---
+            // Flags: Z=Result, N=0, H=1, C=0
+            0xA0 => {
+                self.and_a(self.b);
+                4
+            }
+            0xA1 => {
+                self.and_a(self.c);
+                4
+            }
+            0xA2 => {
+                self.and_a(self.d);
+                4
+            }
+            0xA3 => {
+                self.and_a(self.e);
+                4
+            }
+            0xA4 => {
+                self.and_a(self.h);
+                4
+            }
+            0xA5 => {
+                self.and_a(self.l);
+                4
+            }
+            0xA6 => {
+                let val = self.bus.read_byte(self.get_hl());
+                self.and_a(val);
+                8
+            }
+            0xA7 => {
+                self.and_a(self.a);
+                4
+            }
+            0xE6 => {
+                let val = self.next_u8();
+                self.and_a(val);
+                8
+            }
+
+            // --- CPL (Complement A) ---
+            0x2F => {
+                self.a = !self.a;
+                self.set_n(true);
+                self.set_h(true);
+                4
+            }
+
+            // --- RRCA (Rotate A Right Circular) ---
+            0x0F => {
+                let carry = (self.a & 0x01) != 0;
+                let result = (self.a >> 1) | (if carry { 0x80 } else { 0 });
+                self.a = result;
+
+                self.set_z(false);
+                self.set_n(false);
+                self.set_h(false);
+                self.set_c(carry);
+                4
+            }
+
+            // --- JP (HL) ---
+            0xE9 => {
+                self.pc = self.get_hl();
+                4
+            }
+
+            // --- JP cc, a16 Family (Conditional Absolute Jump) ---
+            0xC2 => {
+                let addr = self.next_u16();
+                if !self.get_z() {
+                    self.pc = addr;
+                    16
+                } else {
+                    12
+                }
+            }
+            0xCA => {
+                let addr = self.next_u16();
+                if self.get_z() {
+                    self.pc = addr;
+                    16
+                } else {
+                    12
+                }
+            }
+            0xD2 => {
+                let addr = self.next_u16();
+                if !self.get_c() {
+                    self.pc = addr;
+                    16
+                } else {
+                    12
+                }
+            }
+            0xDA => {
+                let addr = self.next_u16();
+                if self.get_c() {
+                    self.pc = addr;
+                    16
+                } else {
+                    12
+                }
+            }
+
+            // --- Indirect Load Family ---
+            0x02 => {
+                self.bus.write_byte(self.get_bc(), self.a);
+                8
+            }
+            0x12 => {
+                self.bus.write_byte(self.get_de(), self.a);
+                8
+            }
+            0x0A => {
+                self.a = self.bus.read_byte(self.get_bc());
+                8
+            }
+            0x1A => {
+                self.a = self.bus.read_byte(self.get_de());
+                8
+            }
+
+            // --- ADD / ADC Family ---
+            0x80 => {
+                self.add(self.b);
+                4
+            }
+            0x81 => {
+                self.add(self.c);
+                4
+            }
+            0x82 => {
+                self.add(self.d);
+                4
+            }
+            0x83 => {
+                self.add(self.e);
+                4
+            }
+            0x84 => {
+                self.add(self.h);
+                4
+            }
+            0x85 => {
+                self.add(self.l);
+                4
+            }
+            0x86 => {
+                let val = self.bus.read_byte(self.get_hl());
+                self.add(val);
+                8
+            }
+            0x87 => {
+                self.add(self.a);
+                4
+            }
+            0xC6 => {
+                let val = self.next_u8();
+                self.add(val);
+                8
+            }
+            0x88 => {
+                self.adc(self.b);
+                4
+            }
+            0x89 => {
+                self.adc(self.c);
+                4
+            }
+            0x8A => {
+                self.adc(self.d);
+                4
+            }
+            0x8B => {
+                self.adc(self.e);
+                4
+            }
+            0x8C => {
+                self.adc(self.h);
+                4
+            }
+            0x8D => {
+                self.adc(self.l);
+                4
+            }
+            0x8E => {
+                let val = self.bus.read_byte(self.get_hl());
+                self.adc(val);
+                8
+            }
+            0x8F => {
+                self.adc(self.a);
+                4
+            }
+
+            0xCE => {
+                let val = self.next_u8();
+                self.adc(val);
+                8
+            }
+
+            0x22 => {
+                let hl = self.get_hl();
+                self.bus.write_byte(hl, self.a);
+                self.set_hl(hl.wrapping_add(1));
+                8
+            }
+            0x3A => {
+                let hl = self.get_hl();
+                self.a = self.bus.read_byte(hl);
+                self.set_hl(hl.wrapping_sub(1));
+                8
             }
             0xCB => self.step_cb(),
             _ => {
