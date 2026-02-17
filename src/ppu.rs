@@ -141,10 +141,52 @@ impl Ppu {
 
         (vblank_irq, stat_irq)
     }
+    //https://gbdev.io/pandocs/pixel_fifo.html
     pub fn draw_scanline(&mut self) {
-        let y = self.ly as usize;
+        if !self.is_lcd_enabled() {
+            let offset = self.ly as usize * 160;
+            for x in 0..160 {
+                self.buffer[offset + x] = 0xFFFFFFFF;
+            }
+            return;
+        }
+        let bg_y = self.scy.wrapping_add(self.ly);
+        let base_map_area = self.bg_tile_map_area();
+        let tile_row = (bg_y / 8) as u16;
+        let internal_y = (bg_y % 8) as u16;
+        let canvas_y = self.ly as usize;
         for x in 0..160 {
-            self.buffer[y * 160 + x] = 0x00FFFFFF; // White
+            let bg_x = self.scx.wrapping_add(x);
+            let tile_col = (bg_x / 8) as u16;
+            let internal_x = 7 - (bg_x % 8);
+            let map_address = base_map_area + (tile_row * 32) + tile_col;
+            let tile_index = self.read(map_address);
+            let tile_data_address = match self.tile_data_area() {
+                0x8000 => 0x8000 + (tile_index as u16 * 16),
+                0x8800 => 0x9000 + (tile_index as i8 as i16 * 16) as u16,
+                _ => {
+                    unreachable!()
+                }
+            };
+            let address = tile_data_address + (internal_y * 2);
+            let byte1 = self.read(address);
+            let byte2 = self.read(address + 1);
+            let bit_low = (byte1 >> internal_x) & 1;
+            let bit_high = (byte2 >> internal_x) & 1;
+            let color_id = (bit_high << 1) | bit_low;
+            let palette_color = self.get_color(color_id, self.bgp);
+            self.buffer[canvas_y * 160 + x as usize] = palette_color;
+        }
+    }
+
+    fn get_color(&self, color_id: u8, palette: u8) -> u32 {
+        let shade = (palette >> (color_id * 2)) & 0x03;
+        match shade {
+            0 => 0xFFFFFFFF,
+            1 => 0xFFAAAAAA,
+            2 => 0xFF555555,
+            3 => 0xFF000000,
+            _ => 0,
         }
     }
     pub fn is_lcd_enabled(&self) -> bool {

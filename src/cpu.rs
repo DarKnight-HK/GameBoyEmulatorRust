@@ -178,21 +178,31 @@ impl Cpu {
             8
         }
     }
+    fn call(&mut self, condition: bool) -> u8 {
+        let address = self.next_u16();
+        if condition {
+            self.push_stack(self.pc);
+            self.pc = address;
+            24
+        } else {
+            12
+        }
+    }
     fn add_hl(&mut self, value: u16) {
         let hl = self.get_hl();
-        let (result, carry) = hl.overflowing_add(value);
+        let (result, carr_cby) = hl.overflowing_add(value);
         let h_check = (hl & 0x0FFF) + (value & 0x0FFF) > 0x0FFF;
         self.set_hl(result);
         self.set_n(false);
         self.set_h(h_check);
-        self.set_c(carry);
+        self.set_c(carr_cby);
     }
     fn cp(&mut self, n: u8) {
-        let (result, carry) = self.a.overflowing_sub(n);
+        let (result, carr_cby) = self.a.overflowing_sub(n);
         self.set_z(result == 0);
         self.set_n(true);
         self.set_h((self.a & 0x0F) < (n & 0x0F));
-        self.set_c(carry);
+        self.set_c(carr_cby);
     }
     fn or(&mut self, value: u8) {
         self.a |= value;
@@ -228,24 +238,73 @@ impl Cpu {
         self.set_c(false);
     }
     fn add(&mut self, value: u8) {
-        let (result, carry) = self.a.overflowing_add(value);
+        let (result, carr_cby) = self.a.overflowing_add(value);
         self.set_z(result == 0);
         self.set_n(false);
         self.set_h((self.a & 0x0F) + (value & 0x0F) > 0x0F);
-        self.set_c(carry);
+        self.set_c(carr_cby);
         self.a = result;
     }
 
     fn adc(&mut self, value: u8) {
-        let carry_in = if self.get_c() { 1 } else { 0 };
-        let (sum, carry1) = self.a.overflowing_add(value);
-        let (result, carry2) = sum.overflowing_add(carry_in);
+        let carr_cby_in = if self.get_c() { 1 } else { 0 };
+        let (sum, carr_cby1) = self.a.overflowing_add(value);
+        let (result, carr_cby2) = sum.overflowing_add(carr_cby_in);
 
         self.set_z(result == 0);
         self.set_n(false);
-        self.set_h((self.a & 0x0F) + (value & 0x0F) + carry_in > 0x0F);
-        self.set_c(carry1 || carry2);
+        self.set_h((self.a & 0x0F) + (value & 0x0F) + carr_cby_in > 0x0F);
+        self.set_c(carr_cby1 || carr_cby2);
         self.a = result;
+    }
+
+    fn sub(&mut self, value: u8) {
+        let (result, carry) = self.a.overflowing_sub(value);
+        self.set_z(result == 0);
+        self.set_n(true);
+        self.set_h((self.a & 0x0F) < (value & 0x0F));
+        self.set_c(carry);
+        self.a = result;
+    }
+
+    fn sbc(&mut self, value: u8) {
+        let carry_in = if self.get_c() { 1 } else { 0 };
+        let (res1, borrow1) = self.a.overflowing_sub(value);
+        let (final_res, borrow2) = res1.overflowing_sub(carry_in);
+
+        self.set_z(final_res == 0);
+        self.set_n(true);
+        self.set_h((self.a as u16 & 0x0F) < (value as u16 & 0x0F) + carry_in as u16);
+        self.set_c(borrow1 || borrow2);
+        self.a = final_res;
+    }
+
+    fn daa(&mut self) {
+        let mut correction = 0u8;
+        let mut carry = self.get_c();
+
+        if !self.get_n() {
+            if self.get_h() || (self.a & 0x0F) > 0x09 {
+                correction |= 0x06;
+            }
+            if carry || self.a > 0x99 {
+                correction |= 0x60;
+                carry = true;
+            }
+            self.a = self.a.wrapping_add(correction);
+        } else {
+            if self.get_h() {
+                correction |= 0x06;
+            }
+            if carry {
+                correction |= 0x60;
+            }
+            self.a = self.a.wrapping_sub(correction);
+        }
+
+        self.set_z(self.a == 0);
+        self.set_h(false);
+        self.set_c(carry);
     }
 }
 
@@ -279,59 +338,77 @@ impl Cpu {
         }
     }
 
-    fn rlc(&mut self, value: u8) -> u8 {
-        let carry = (value & 0x80) != 0;
-        let result = (value << 1) | (if carry { 1 } else { 0 });
+    fn rlc_cb(&mut self, value: u8) -> u8 {
+        let carr_cby = (value & 0x80) != 0;
+        let result = (value << 1) | (if carr_cby { 1 } else { 0 });
         self.set_z(result == 0);
         self.set_n(false);
         self.set_h(false);
-        self.set_c(carry);
+        self.set_c(carr_cby);
         result
     }
-    fn rrc(&mut self, value: u8) -> u8 {
-        let carry = (value & 0x01) != 0;
-        let result = (value >> 1) | (if carry { 0x80 } else { 0 });
+    fn rlc(&mut self, value: u8) -> u8 {
+        let carr_cby = (value & 0x80) != 0;
+        let result = (value << 1) | (if carr_cby { 1 } else { 0 });
+        self.set_z(false);
+        self.set_n(false);
+        self.set_h(false);
+        self.set_c(carr_cby);
+        result
+    }
+    fn rr_cbc(&mut self, value: u8) -> u8 {
+        let carr_cby = (value & 0x01) != 0;
+        let result = (value >> 1) | (if carr_cby { 0x80 } else { 0 });
         self.set_z(result == 0);
         self.set_n(false);
         self.set_h(false);
-        self.set_c(carry);
+        self.set_c(carr_cby);
         result
     }
 
     fn rl(&mut self, value: u8) -> u8 {
-        let new_carry = (value & 0x80) != 0;
+        let new_carr_cby = (value & 0x80) != 0;
         let result = (value << 1) | (if self.get_c() { 1 } else { 0 });
         self.set_z(result == 0);
         self.set_n(false);
         self.set_h(false);
-        self.set_c(new_carry);
+        self.set_c(new_carr_cby);
         result
     }
-    fn rr(&mut self, value: u8) -> u8 {
-        let new_carry = (value & 0x01) != 0;
+    fn rr_cb(&mut self, value: u8) -> u8 {
+        let new_carr_cby = (value & 0x01) != 0;
         let result = (value >> 1) | (if self.get_c() { 0x80 } else { 0 });
         self.set_z(result == 0);
         self.set_n(false);
         self.set_h(false);
-        self.set_c(new_carry);
+        self.set_c(new_carr_cby);
+        result
+    }
+    fn rr(&mut self, value: u8) -> u8 {
+        let new_carr_cby = (value & 0x01) != 0;
+        let result = (value >> 1) | (if self.get_c() { 0x80 } else { 0 });
+        self.set_z(false);
+        self.set_n(false);
+        self.set_h(false);
+        self.set_c(new_carr_cby);
         result
     }
     fn sla(&mut self, value: u8) -> u8 {
-        let carry = (value & 0x80) != 0;
+        let carr_cby = (value & 0x80) != 0;
         let result = value << 1;
         self.set_z(result == 0);
         self.set_n(false);
         self.set_h(false);
-        self.set_c(carry);
+        self.set_c(carr_cby);
         result
     }
     fn sra(&mut self, value: u8) -> u8 {
-        let carry = (value & 0x01) != 0;
+        let carr_cby = (value & 0x01) != 0;
         let result = (value >> 1) | (value & 0x80);
         self.set_z(result == 0);
         self.set_n(false);
         self.set_h(false);
-        self.set_c(carry);
+        self.set_c(carr_cby);
         result
     }
     fn swap(&mut self, value: u8) -> u8 {
@@ -343,12 +420,12 @@ impl Cpu {
         result
     }
     fn srl(&mut self, value: u8) -> u8 {
-        let carry = (value & 0x01) != 0;
+        let carr_cby = (value & 0x01) != 0;
         let result = value >> 1;
         self.set_z(result == 0);
         self.set_n(false);
         self.set_h(false);
-        self.set_c(carry);
+        self.set_c(carr_cby);
         result
     }
 }
@@ -484,13 +561,13 @@ impl Cpu {
                 self.jr(check)
             }
 
-            // 0x30: JR NC, r8 (Jump if Not Carry)
+            // 0x30: JR NC, r8 (Jump if Not Carr_cby)
             0x30 => {
                 let check = !self.get_c();
                 self.jr(check)
             }
 
-            // 0x38: JR C, r8 (Jump if Carry)
+            // 0x38: JR C, r8 (Jump if Carr_cby)
             0x38 => {
                 let check = self.get_c();
                 self.jr(check)
@@ -524,6 +601,50 @@ impl Cpu {
             0x3E => {
                 self.a = self.next_u8();
                 8
+            }
+
+            0x08 => {
+                let address = self.next_u16();
+                self.bus.write_byte(address, (self.sp & 0x00FF) as u8);
+                self.bus
+                    .write_byte(address.wrapping_add(1), ((self.sp & 0xFF00) >> 8) as u8);
+                20
+            }
+
+            0x10 => {
+                self.next_u8();
+                self.is_sleeping = true;
+                4
+            }
+
+            0x17 => {
+                let carry_in = if self.get_c() { 1 } else { 0 };
+                let carry_out = (self.a & 0x80) != 0;
+                self.a = (self.a << 1) | carry_in;
+                self.set_z(false);
+                self.set_n(false);
+                self.set_h(false);
+                self.set_c(carry_out);
+                4
+            }
+
+            0x27 => {
+                self.daa();
+                4
+            }
+
+            0x37 => {
+                self.set_n(false);
+                self.set_h(false);
+                self.set_c(true);
+                4
+            }
+
+            0x3F => {
+                self.set_n(false);
+                self.set_h(false);
+                self.set_c(!self.get_c());
+                4
             }
 
             0x36 => {
@@ -649,7 +770,7 @@ impl Cpu {
                 self.set_de(val);
                 12
             }
-            // --- DEC rr Family (Decrement 16-bit) ---
+            // --- DEC rr_cb Family (Decrement 16-bit) ---
             // Flags: None affected
             0x0B => {
                 let val = self.get_bc().wrapping_sub(1);
@@ -792,7 +913,7 @@ impl Cpu {
                 self.ime = true;
                 16
             }
-            // --- PUSH rr Family ---
+            // --- PUSH rr_cb Family ---
             0xC5 => {
                 let val = self.get_bc();
                 self.push_stack(val);
@@ -1216,16 +1337,16 @@ impl Cpu {
                 4
             }
 
-            // --- RRCA (Rotate A Right Circular) ---
+            // --- rr_cbCA (Rotate A Right Circular) ---
             0x0F => {
-                let carry = (self.a & 0x01) != 0;
-                let result = (self.a >> 1) | (if carry { 0x80 } else { 0 });
+                let carr_cby = (self.a & 0x01) != 0;
+                let result = (self.a >> 1) | (if carr_cby { 0x80 } else { 0 });
                 self.a = result;
 
                 self.set_z(false);
                 self.set_n(false);
                 self.set_h(false);
-                self.set_c(carry);
+                self.set_c(carr_cby);
                 4
             }
 
@@ -1382,10 +1503,136 @@ impl Cpu {
                 self.set_hl(hl.wrapping_sub(1));
                 8
             }
+            0xC4 => self.call(self.get_z() == false),
+            0xD4 => self.call(self.get_c() == false),
+            0xCC => self.call(self.get_z()),
+            0xDC => self.call(self.get_c()),
+            0x1F => {
+                self.a = self.rr(self.a);
+                4
+            }
+            0x07 => {
+                self.a = self.rlc(self.a);
+                4
+            }
+            // --- SUB Family (Subtract from A) ---
+            0x90 => {
+                self.sub(self.b);
+                4
+            }
+            0x91 => {
+                self.sub(self.c);
+                4
+            }
+            0x92 => {
+                self.sub(self.d);
+                4
+            }
+            0x93 => {
+                self.sub(self.e);
+                4
+            }
+            0x94 => {
+                self.sub(self.h);
+                4
+            }
+            0x95 => {
+                self.sub(self.l);
+                4
+            }
+            0x96 => {
+                let val = self.bus.read_byte(self.get_hl());
+                self.sub(val);
+                8
+            }
+            0x97 => {
+                self.sub(self.a);
+                4
+            }
+            // SUB Immediate (d8)
+            0xD6 => {
+                let val = self.next_u8();
+                self.sub(val);
+                8
+            }
+
+            // --- SBC Family (Subtract with Carry) ---
+            0x98 => {
+                self.sbc(self.b);
+                4
+            }
+            0x99 => {
+                self.sbc(self.c);
+                4
+            }
+            0x9A => {
+                self.sbc(self.d);
+                4
+            }
+            0x9B => {
+                self.sbc(self.e);
+                4
+            }
+            0x9C => {
+                self.sbc(self.h);
+                4
+            }
+            0x9D => {
+                self.sbc(self.l);
+                4
+            }
+            0x9E => {
+                let val = self.bus.read_byte(self.get_hl());
+                self.sbc(val);
+                8
+            }
+            0x9F => {
+                self.sbc(self.a);
+                4
+            }
+            0xDE => {
+                let val = self.next_u8();
+                self.sbc(val);
+                8
+            }
+            0xEE => {
+                let val = self.next_u8();
+                self.xor_a(val);
+                8
+            }
+            0xF8 => {
+                let offset = self.next_u8() as i8;
+                let sp = self.sp;
+                let result = sp.wrapping_add(offset as u16);
+                self.set_z(false);
+                self.set_n(false);
+                self.set_h((sp & 0x0F) + (offset as u16 & 0x0F) > 0x0F);
+                self.set_c((sp & 0xFF) + (offset as u16 & 0xFF) > 0xFF);
+
+                self.set_hl(result);
+                12
+            }
+            0xE8 => {
+                let offset = self.next_u8() as i8;
+                let sp_low = (self.sp & 0xFF) as u8;
+                let offset_u8 = offset as u8;
+                self.set_z(false);
+                self.set_n(false);
+                self.set_h((sp_low & 0x0F) + (offset_u8 & 0x0F) > 0x0F);
+                self.set_c((sp_low as u16 + offset_u8 as u16) > 0xFF);
+                self.sp = self.sp.wrapping_add(offset as u16);
+                16
+            }
+
+            0xF9 => {
+                self.sp = self.get_hl();
+                8
+            }
+
             0xCB => self.step_cb(),
             _ => {
                 println!("Unknown Opcode: {:#02X} at {:#04X}", opcode, self.pc - 1);
-                0
+                4
             }
         }
     }
@@ -1414,14 +1661,14 @@ impl Cpu {
             0 => {
                 let val = self.get_cb_reg(reg_idx);
                 let result = match bit_idx {
-                    0 => self.rlc(val),  // RLC
-                    1 => self.rrc(val),  // RRC
-                    2 => self.rl(val),   // RL
-                    3 => self.rr(val),   // RR
-                    4 => self.sla(val),  // SLA
-                    5 => self.sra(val),  // SRA
-                    6 => self.swap(val), // SWAP
-                    7 => self.srl(val),  // SRL
+                    0 => self.rlc_cb(val), // rlc_cb
+                    1 => self.rr_cbc(val), // rr_cbC
+                    2 => self.rl(val),     // RL
+                    3 => self.rr_cb(val),  // rr_cb
+                    4 => self.sla(val),    // SLA
+                    5 => self.sra(val),    // SRA
+                    6 => self.swap(val),   // SWAP
+                    7 => self.srl(val),    // SRL
                     _ => unreachable!(),
                 };
                 self.set_cb_reg(reg_idx, result);
