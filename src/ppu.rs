@@ -176,6 +176,7 @@ impl Ppu {
             let color_id = (bit_high << 1) | bit_low;
             let palette_color = self.get_color(color_id, self.bgp);
             self.buffer[canvas_y * 160 + x as usize] = palette_color;
+            self.draw_sprites();
         }
     }
 
@@ -187,6 +188,63 @@ impl Ppu {
             2 => 0xFF555555,
             3 => 0xFF000000,
             _ => 0,
+        }
+    }
+    fn draw_sprites(&mut self) {
+        if !self.obj_enabled() {
+            return;
+        }
+        let sprite_height = if self.obj_size() { 16 } else { 8 };
+        let line = self.ly as i32;
+        for i in 0..40 {
+            let offset = i * 4;
+            let sprite_y = self.oam[offset] as i32 - 16;
+            let sprite_x = self.oam[offset + 1] as i32 - 8;
+            let mut tile_index = self.oam[offset + 2];
+            let flags = self.oam[offset + 3];
+            // Bit mask to extract each flag
+            let priority_below_bg = (flags & 0x80) != 0;
+            let y_flip = (flags & 0x40) != 0;
+            let x_flip = (flags & 0x20) != 0;
+            let pallete = (flags & 0x10) != 0;
+            if line >= sprite_y && line < (sprite_y + sprite_height) {
+                let mut row_to_draw = line - sprite_y;
+                if y_flip {
+                    row_to_draw = sprite_height - 1 - row_to_draw;
+                }
+                if sprite_height == 16 {
+                    tile_index &= 0xFE;
+                    if row_to_draw >= 8 {
+                        tile_index += 1;
+                        row_to_draw -= 8;
+                    }
+                }
+                let tile_address = 0x8000 + (tile_index as u16 * 16);
+                let row_address = tile_address + (row_to_draw as u16 * 2);
+                let byte1 = self.read(row_address);
+                let byte2 = self.read(row_address + 1);
+                for x in 0..8 {
+                    let pixel_x = sprite_x + x;
+                    if pixel_x >= 0 && pixel_x < 160 {
+                        let bit_index = if x_flip { x } else { 7 - x };
+                        let bit_low = (byte1 >> bit_index) & 1;
+                        let bit_high = (byte2 >> bit_index) & 1;
+                        let color_id = (bit_high << 1) | bit_low;
+                        if color_id == 0 {
+                            continue;
+                        }
+                        let buffer_idx = (self.ly as usize * 160) + pixel_x as usize;
+                        let current_bg_pixel = self.buffer[buffer_idx];
+                        // if BG priority is set and BG is not white, sprite is hidden by the non-white BG pixel
+                        if priority_below_bg && current_bg_pixel != 0xFFFFFFFF {
+                            continue;
+                        }
+                        let palette = if pallete { self.obp1 } else { self.obp0 };
+                        let color = self.get_color(color_id, palette);
+                        self.buffer[buffer_idx] = color;
+                    }
+                }
+            }
         }
     }
     pub fn is_lcd_enabled(&self) -> bool {
