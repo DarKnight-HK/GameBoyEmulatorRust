@@ -1,10 +1,11 @@
 use crate::cartridge::Cartridge;
 use crate::dma::Dma;
 use crate::interrupts::Interrupt;
+use crate::joypad::Joypad;
 use crate::ppu::Ppu;
 use crate::timer::Timer;
-
 pub struct Bus {
+    pub joypad: Joypad,
     pub ppu: Ppu,
     pub timer: Timer,
     pub dma: Dma,
@@ -18,6 +19,7 @@ pub struct Bus {
 impl Bus {
     pub fn new(cartridge: Cartridge) -> Self {
         Bus {
+            joypad: Joypad::new(),
             ppu: Ppu::new(),
             timer: Timer::new(),
             dma: Dma::new(),
@@ -60,6 +62,7 @@ impl Bus {
             0xFE00..=0xFE9F => self.ppu.read(address),
 
             0xFF00..=0xFF7F => match address {
+                0xFF00 => self.joypad.read(),
                 0xFF0F => self.int_flag,
                 0xFF04..=0xFF07 => self.timer.read(address),
 
@@ -86,6 +89,7 @@ impl Bus {
             0xFE00..=0xFE9F => self.ppu.write(address, byte),
 
             0xFF00..=0xFF7F => match address {
+                0xFF00 => self.joypad.write(byte),
                 0xFF0F => self.int_flag = byte,
                 0xFF04..=0xFF07 => self.timer.write(address, byte),
 

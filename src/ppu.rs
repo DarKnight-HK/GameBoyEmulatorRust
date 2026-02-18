@@ -75,7 +75,14 @@ impl Ppu {
         match address {
             0x8000..=0x9FFF => self.vram[(address - 0x8000) as usize] = value,
             0xFE00..=0xFE9F => self.oam[(address - 0xFE00) as usize] = value,
-            0xFF40 => self.lcdc = value,
+            0xFF40 => {
+                self.lcdc = value;
+                if (value & 0x80) == 0 {
+                    self.ly = 0;
+                    self.mode = PpuMode::HBlank;
+                    self.cycle_accumulator = 0;
+                }
+            }
             0xFF41 => self.stat = (self.stat & 0xFC) | (value & 0xF8),
             0xFF42 => self.scy = value,
             0xFF43 => self.scx = value,
@@ -176,8 +183,8 @@ impl Ppu {
             let color_id = (bit_high << 1) | bit_low;
             let palette_color = self.get_color(color_id, self.bgp);
             self.buffer[canvas_y * 160 + x as usize] = palette_color;
-            self.draw_sprites();
         }
+        self.draw_sprites();
     }
 
     fn get_color(&self, color_id: u8, palette: u8) -> u32 {
