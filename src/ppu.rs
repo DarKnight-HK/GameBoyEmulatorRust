@@ -25,6 +25,7 @@ pub struct Ppu {
     pub wx: u8,   // 0xFF4B: Window X
     pub mode: PpuMode,
     pub cycle_accumulator: u32,
+    pub stat_line: bool,
 }
 
 impl Ppu {
@@ -48,6 +49,7 @@ impl Ppu {
 
             mode: PpuMode::OamSearch,
             cycle_accumulator: 0,
+            stat_line: false,
         }
     }
 
@@ -57,7 +59,14 @@ impl Ppu {
             0xFE00..=0xFE9F => self.oam[(address - 0xFE00) as usize],
 
             0xFF40 => self.lcdc,
-            0xFF41 => self.stat,
+            0xFF41 => {
+                let mut stat = self.stat & 0xF8;
+                if self.ly == self.lyc {
+                    stat |= 0x04;
+                }
+                stat |= self.mode as u8;
+                stat | 0x80
+            }
             0xFF42 => self.scy,
             0xFF43 => self.scx,
             0xFF44 => self.ly,
@@ -102,6 +111,10 @@ impl Ppu {
         let mut vblank_irq = false;
         let mut stat_irq = false;
 
+        if !self.is_lcd_enabled() {
+            return (false, false);
+        }
+
         self.cycle_accumulator += cycles as u32;
 
         if self.ly >= 144 {
@@ -115,36 +128,38 @@ impl Ppu {
                     self.mode = PpuMode::OamSearch;
                 }
             }
-            return (
-                self.ly == 144 && self.cycle_accumulator < cycles as u32,
-                false,
-            );
-        }
-
-        // NORMAL LINE Handling (Lines 0-143)
-        if self.cycle_accumulator < 80 {
-            // Mode 2: OAM Scan
-            self.mode = PpuMode::OamSearch;
-        } else if self.cycle_accumulator < 252 {
-            // Mode 3: Pixel Transfer
-            self.mode = PpuMode::PixelTransfer;
-        } else if self.cycle_accumulator < 456 {
-            // Mode 0: H-Blank
-            if self.mode != PpuMode::HBlank {
-                self.mode = PpuMode::HBlank;
-                self.draw_scanline();
-            }
         } else {
-            self.cycle_accumulator -= 456;
-            self.ly += 1;
-
-            if self.ly == 144 {
-                self.mode = PpuMode::VBlank;
-                vblank_irq = true;
-            } else {
+            if self.cycle_accumulator < 80 {
                 self.mode = PpuMode::OamSearch;
+            } else if self.cycle_accumulator < 252 {
+                self.mode = PpuMode::PixelTransfer;
+            } else if self.cycle_accumulator < 456 {
+                if self.mode != PpuMode::HBlank {
+                    self.mode = PpuMode::HBlank;
+                    self.draw_scanline();
+                }
+            } else {
+                self.cycle_accumulator -= 456;
+                self.ly += 1;
+
+                if self.ly == 144 {
+                    self.mode = PpuMode::VBlank;
+                    vblank_irq = true;
+                } else {
+                    self.mode = PpuMode::OamSearch;
+                }
             }
         }
+
+        let stat_signal = (self.ly == self.lyc && (self.stat & 0x40) != 0)
+            || (self.mode == PpuMode::OamSearch && (self.stat & 0x20) != 0)
+            || (self.mode == PpuMode::VBlank && (self.stat & 0x10) != 0)
+            || (self.mode == PpuMode::HBlank && (self.stat & 0x08) != 0);
+
+        if stat_signal && !self.stat_line {
+            stat_irq = true;
+        }
+        self.stat_line = stat_signal;
 
         (vblank_irq, stat_irq)
     }

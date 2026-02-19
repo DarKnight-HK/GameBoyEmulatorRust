@@ -57,7 +57,7 @@ impl Bus {
 
             0xA000..=0xBFFF => self.cartridge.read(address),
             0xC000..=0xDFFF => self.wram[(address - 0xC000) as usize],
-            0xE000..=0xFDFF => 0,
+            0xE000..=0xFDFF => self.wram[(address - 0xE000) as usize],
 
             0xFE00..=0xFE9F => self.ppu.read(address),
 
@@ -79,10 +79,10 @@ impl Bus {
 
     pub fn write_byte(&mut self, address: u16, byte: u8) {
         match address {
-            0x0000..=0x7FFF => {}
+            0x0000..=0x7FFF => self.cartridge.write(address, byte),
 
             0x8000..=0x9FFF => self.ppu.write(address, byte),
-
+            0xE000..=0xFDFF => self.wram[(address - 0xE000) as usize] = byte,
             0xA000..=0xBFFF => self.cartridge.write(address, byte),
             0xC000..=0xDFFF => self.wram[(address - 0xC000) as usize] = byte, // WRAM Logic
 

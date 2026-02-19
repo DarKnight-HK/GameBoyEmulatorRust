@@ -30,7 +30,7 @@ fn main() {
 
     window.set_target_fps(60);
 
-    let bus = Bus::new(Cartridge::new("tetris.gb").unwrap());
+    let bus = Bus::new(Cartridge::new("aip.gb").unwrap());
     let mut cpu = Cpu::new(bus);
 
     const CYCLES_PER_FRAME: u32 = 70224;
