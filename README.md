@@ -95,7 +95,7 @@ After the workflow completes, users can download the packaged executable directl
 - `src/interrupts.rs` - interrupt vectors and masks
 - `src/main.rs` - window loop, input polling, frame stepping
 
-## Suggested next milestones
+## Next milestones (prolly will never finish hehe)
 
 1. Implement save RAM persistence (`.sav` files).
 2. Add MBC3 (+ RTC) and MBC2 support.
