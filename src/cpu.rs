@@ -1155,7 +1155,10 @@ impl Cpu {
                 self.l = self.b;
                 4
             }
-            0x69 => 4,
+            0x69 => {
+                self.l = self.c;
+                4
+            }
             0x6A => {
                 self.l = self.d;
                 4
