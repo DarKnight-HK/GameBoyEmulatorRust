@@ -257,10 +257,15 @@ impl Ppu {
                         }
                         let buffer_idx = (self.ly as usize * 160) + pixel_x as usize;
                         let current_bg_pixel = self.buffer[buffer_idx];
-                        // if BG priority is set and BG is not white, sprite is hidden by the non-white BG pixel
-                        if priority_below_bg && current_bg_pixel != 0xFFFFFFFF {
+
+                        // Find out what the current "blank" background color is dynamically
+                        let bg_color_0 = self.get_color(0, self.bgp);
+
+                        // If BG priority is set and BG is not the blank color, hide the sprite
+                        if priority_below_bg && current_bg_pixel != bg_color_0 {
                             continue;
                         }
+
                         let palette = if pallete { self.obp1 } else { self.obp0 };
                         let color = self.get_color(color_id, palette);
                         self.buffer[buffer_idx] = color;
