@@ -205,11 +205,11 @@ impl Ppu {
     fn get_color(&self, color_id: u8, palette: u8) -> u32 {
         let shade = (palette >> (color_id * 2)) & 0x03;
         match shade {
-            0 => 0xFFFFFFFF,
-            1 => 0xFFAAAAAA,
-            2 => 0xFF555555,
-            3 => 0xFF000000,
-            _ => 0,
+            0 => 0xFFE0F8D0,
+            1 => 0xFF88C070,
+            2 => 0xFF346856,
+            3 => 0xFF081820,
+            _ => 0xFFE0F8D0,
         }
     }
     fn draw_sprites(&mut self) {
