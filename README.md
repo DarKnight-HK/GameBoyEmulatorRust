@@ -67,6 +67,23 @@ cargo build --release
 cargo run --release
 ```
 
+## Automated GitHub Releases
+
+This repository includes a GitHub Actions workflow that builds a Windows executable and uploads it to the GitHub Release assets.
+
+- Workflow file: `.github/workflows/release.yml`
+- Trigger: push a tag like `v0.1.0`
+- Output asset: `GameBoyEmulator-vX.Y.Z-windows-x64.zip`
+
+### How to publish a release
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+After the workflow completes, users can download the packaged executable directly from the Release page.
+
 ## Project structure
 
 - `src/cpu.rs` - CPU core and instruction execution
@@ -80,9 +97,8 @@ cargo run --release
 
 ## Suggested next milestones
 
-1. Add CLI ROM loading (`cargo run -- path/to/game.gb`) instead of hardcoded path.
-2. Implement save RAM persistence (`.sav` files).
-3. Add MBC3 (+ RTC) and MBC2 support.
-4. Improve PPU timing/pixel pipeline correctness.
-5. Add APU/sound emulation.
-6. Add test ROM automation (e.g., Blargg/Mooneye subsets) for regressions.
+1. Implement save RAM persistence (`.sav` files).
+2. Add MBC3 (+ RTC) and MBC2 support.
+3. Improve PPU timing/pixel pipeline correctness.
+4. Add APU/sound emulation.
+5. Add test ROM automation (e.g., Blargg/Mooneye subsets) for regressions.
